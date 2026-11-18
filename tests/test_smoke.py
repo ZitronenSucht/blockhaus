@@ -255,6 +255,12 @@ class TestHttp(unittest.TestCase):
             self.opener.open(req, timeout=30)
         self.assertEqual(json.loads(cm.exception.read())["error"],
                          "A server cannot be created without accepting the Minecraft EULA")
+        ob = self.call("/api/onboarding")
+        self.assertEqual([x["id"] for x in ob["steps"]], ["start", "join", "op", "friends", "backup"])
+        self.assertFalse(ob["tourDone"])
+        self.call("/api/onboarding", {"flag": "tour"})
+        self.assertTrue(self.call("/api/onboarding")["tourDone"])
+        self.call("/api/onboarding", {"flag": "nope"}, expect=400)
         en = self.call("/i18n/en.json")
         self.assertEqual(en["Speichern"], "Save")
         page = self.call("/")

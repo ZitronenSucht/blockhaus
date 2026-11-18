@@ -5652,6 +5652,51 @@ def r_panel_settings_set(h, s, q):
     h.json({"ok": True, "settings": panel_settings(), "restartPanel": CONF.get("listen_host") != old_host})
 
 
+# ═════════════════════════ Einführung (Erste Schritte & Tour) ═════════════════════════
+
+def user_flags(name):
+    return get_users().get(name, {}).get("onboarding", {})
+
+
+def set_user_flag(name, key, val=True):
+    with users_lock:
+        users = get_users()
+        if name in users:
+            users[name].setdefault("onboarding", {})[key] = val
+            save_json(USERS_PATH, users)
+
+
+@api("GET", "/api/onboarding")
+def r_onboarding(h, s, q):
+    flags = user_flags(s["user"])
+    p = read_props()
+    running = svc_info().get("ActiveState") == "active"
+    started = running or os.path.isfile(srv("logs", "latest.log"))
+    joined = bool([e for e in load_json(srv("usercache.json"), []) if isinstance(e, dict)])
+    ops = [e.get("name") for e in load_json(srv("ops.json"), []) if isinstance(e, dict)]
+    steps = [
+        {"id": "start", "done": started},
+        {"id": "join", "done": joined},
+        {"id": "op", "done": bool(ops)},
+        {"id": "friends", "done": bool(flags.get("friends")) or bool(CONF.get("public_address"))},
+        {"id": "backup", "done": float(CONF.get("auto_backup_hours") or 0) > 0},
+    ]
+    h.json({"steps": steps, "dismissed": bool(flags.get("dismissed")), "tourDone": bool(flags.get("tour")),
+            "running": running, "port": p.get("server-port") or "25565", "lanIp": osutil.lan_ip(),
+            "address": CONF.get("public_address") or "", "whitelist": p.get("white-list") == "true",
+            "autoBackupHours": CONF.get("auto_backup_hours") or 0})
+
+
+@api("POST", "/api/onboarding")
+def r_onboarding_set(h, s, q):
+    d = h.body_json()
+    key = d.get("flag")
+    if key not in ("dismissed", "tour", "friends"):
+        raise ApiError("Unbekannte Aktion")
+    set_user_flag(s["user"], key, bool(d.get("value", True)))
+    h.json({"ok": True})
+
+
 api("GET", "/api/metrics")(r_metrics)
 
 

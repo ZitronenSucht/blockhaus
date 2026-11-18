@@ -203,7 +203,11 @@ def is_text(f):
         return False
     if re.search(r"^\s*(var\(|rgba?\(|#[0-9a-f]{3})", f):
         return False
-    return bool(GERMAN_HINT.search(f)) or re.fullmatch(r"[A-ZÄÖÜ][a-zäöüß]+(?:[ -][A-Za-zäöüß]+)*[.…:!?]?", f) is not None
+    if bool(GERMAN_HINT.search(f)) or re.fullmatch(r"[A-ZÄÖÜ][a-zäöüß]+(?:[ -][A-Za-zäöüß]+)*[.…:!?]?", f):
+        return True
+    # Großgeschriebener Text mit Leerzeichen/Satzzeichen (z. B. „Starten & Stoppen“, „Los geht’s“)
+    return re.match(r"[A-ZÄÖÜ][a-zäöüß]", f) is not None and re.search(r"[ ’'→&]", f) is not None \
+        and not re.search(r"[{}();=<>]|\b(const|let|return|function)\b", f)
 
 
 # ── Python: Meldungen in ApiError(...), RuntimeError(...), push_log(...), step(...), set_task({"msg": ...}) ──

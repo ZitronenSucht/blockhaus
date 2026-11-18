@@ -1001,3 +1001,28 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 @media (max-width: 640px) { .wiz-grid { grid-template-columns: 1fr; } .wiz-grid .span-2 { grid-column: auto; } .wiz-body { padding: 18px 16px 6px; } .wiz-foot { padding: 12px 16px; } }
 .login-lang { display: flex; justify-content: center; margin-top: 12px; }
 .login-lang select { width: auto; height: 32px; padding: 0 10px; font-size: 13px; }
+
+/* Einführung: Erste Schritte & Rundgang */
+.ob-card { margin-bottom: 16px; }
+.ob-bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; margin: -4px 0 12px; }
+.ob-bar span { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s; }
+.ob-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ob-list li { display: flex; align-items: center; gap: 14px; padding: 12px 2px; border-top: 1px solid var(--line); flex-wrap: wrap; }
+.ob-list li:first-child { border-top: 0; }
+.ob-check { width: 24px; height: 24px; flex: none; border-radius: 50%; border: 2px solid var(--line-2); display: grid; place-items: center; color: var(--accent-ink); }
+.ob-list li.done .ob-check { background: var(--accent); border-color: var(--accent); }
+.ob-check svg { width: 14px; height: 14px; }
+.ob-text { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ob-text small { color: var(--muted); font-size: 12.5px; line-height: 1.4; }
+.ob-list li.done .ob-text b { color: var(--muted); text-decoration: line-through; }
+.ob-act { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ob-op .input { width: 170px; height: 32px; }
+.ob-addr b { font-size: 14px; }
+.ob-steps { margin: 0 0 14px; }
+.tour { position: fixed; inset: 0; z-index: 200; }
+.tour-hole { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(0, 0, 0, .62); transition: all .25s ease; pointer-events: none; outline: 2px solid var(--accent); }
+.tour-bubble { position: fixed; background: var(--surface); border: 1px solid var(--line-2); border-radius: 14px; padding: 16px 18px; box-shadow: 0 20px 50px -10px rgba(0,0,0,.6); transition: left .25s, top .25s; }
+.tour-bubble h3 { margin: 4px 0 6px; font-size: 16px; }
+.tour-bubble p { margin: 0 0 14px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.tour-n { color: var(--muted); font-size: 12px; font-weight: 600; }
+.tour-btns { display: flex; align-items: center; gap: 8px; }

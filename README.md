@@ -30,7 +30,7 @@ or wherever `BLOCKHAUS_DATA` points.
 1. OS-independent core (process control, backups, metrics, Java download) – *done*
 2. First-run setup wizard: create a server, choose RAM and storage limits – *done*
 3. German / English – *done*
-4. Guided introduction
+4. Guided introduction – *done*
 5. Installers for Linux, macOS and Windows (terminal or desktop app), one-click updates, autostart, full uninstall
 
 ## Translations

@@ -552,7 +552,7 @@ VIEWS.overview = (v) => {
   const addr = me.address ? `${me.address}:${me.port}` : `Port ${me.port}`;
   v.innerHTML = `
   ${head(greeting(), `Alles Wichtige zu deinem Server auf einen Blick.`)}
-  <div id="ov-alert"></div>
+  <div id="ov-alert"></div><div id="ov-ob"></div>
   <div class="grid g-main">
     <div class="card hero" id="ov-hero"><div class="sky" id="ov-sky"><div class="stars"></div><div class="orb"></div><div class="rain"></div><div class="ground"></div></div><div class="hero-c"></div></div>
     <div class="card"><div class="card-h"><h2>Gerade online</h2><span class="sub" id="ov-pcount"></span><div class="right"><a class="btn btn-ghost btn-sm" href="#/players">Alle ${ico('chevron')}</a></div></div><div class="plist" id="ov-online"></div></div>
@@ -584,6 +584,8 @@ VIEWS.overview = (v) => {
     <a class="card" href="#/console" style="text-decoration:none;color:inherit"><div class="card-h"><h2>Live-Log</h2><span class="sub">zum Öffnen klicken</span></div><div class="mini-log" id="ov-log"></div></a>
     <div class="card"><div class="card-h"><h2>System</h2><span class="sub">Rechner</span></div><div id="ov-sys"></div></div>
   </div>`;
+  onboardingCard($('#ov-ob', v));
+  maybeTour();
 
   let chartKey = store.get('chartKey', 'mspt');
   if (chartKey === 'jmem') chartKey = 'heapUsed';
@@ -3591,7 +3593,10 @@ async function resourcesCard(el) {
         <p class="muted" style="font-size:12.5px;margin:0">Java: ${st.java === 'auto' ? `automatisch${r.java.managed.length ? ` (geladen: ${r.java.managed.map((j) => 'Java ' + j).join(', ')})` : ''}` : esc(st.java)}</p>
       </div>
     </div>
-    <div class="row" style="margin-top:16px"><button class="btn btn-primary btn-sm" id="r-save">${ico('save')}Speichern</button><span class="muted" id="r-msg" style="font-size:13px"></span></div></div>`;
+    <div class="row" style="margin-top:16px"><button class="btn btn-primary btn-sm" id="r-save">${ico('save')}Speichern</button><span class="muted" id="r-msg" style="font-size:13px"></span><span class="grow"></span>
+      <button class="btn btn-ghost btn-sm" id="r-tour">${ico('sparkle')}Rundgang starten</button><button class="btn btn-ghost btn-sm" id="r-ob">Erste Schritte wieder anzeigen</button></div></div>`;
+  $('#r-tour', el).onclick = () => { location.hash = '#/overview'; setTimeout(() => startTour(true), 400); };
+  $('#r-ob', el).onclick = async () => { if (await run(() => post('/api/onboarding', { flag: 'dismissed', value: false }), 'Erste Schritte stehen wieder auf der Übersicht')) location.hash = '#/overview'; };
   $('#r-lang', el).onchange = (e) => setLanguage(e.target.value);
   $('#r-ram', el).oninput = (e) => { ram = +e.target.value; $('#r-ramv', el).textContent = mb2gb(ram); };
   $('#r-st', el).onchange = (e) => { $('#r-st-row', el).hidden = !e.target.checked; };
@@ -3605,6 +3610,160 @@ async function resourcesCard(el) {
     }
   };
   hydrateIcons(el);
+}
+
+// ═════════════════════════ Einführung: Erste Schritte, Hilfe zur Portfreigabe, Tour ═════════════════════════
+const OB_STEPS = {
+  start: ['Server starten', 'Beim ersten Start erzeugt Minecraft die Welt – das dauert ein bis zwei Minuten.'],
+  join: ['Mit Minecraft verbinden', 'Im Spiel: Mehrspieler → Server hinzufügen → diese Adresse eintragen.'],
+  op: ['Dich zum Operator machen', 'Operatoren dürfen im Spiel alle Befehle nutzen (z. B. /gamemode). Dein Minecraft-Name:'],
+  friends: ['Freunde einladen', 'Im selben WLAN können Freunde sofort joinen. Für Freunde von außerhalb braucht es eine Portfreigabe im Router.'],
+  backup: ['Automatische Backups', 'Sichert die Welt regelmäßig, damit nichts verloren geht.'],
+};
+
+async function onboardingCard(el) {
+  let r;
+  try { r = await api('/api/onboarding'); } catch { el.innerHTML = ''; return; }
+  if (r.dismissed || r.steps.every((x) => x.done)) { el.innerHTML = ''; return; }
+  const doneN = r.steps.filter((x) => x.done).length;
+  const addr = `${r.address || r.lanIp}${String(r.port) !== '25565' ? ':' + r.port : ''}`;
+  const action = (id) => {
+    if (id === 'start') return r.running ? '' : `<button class="btn btn-primary btn-sm" data-ob="start">${ico('play')}Server starten</button>`;
+    if (id === 'join') return `<span class="ob-addr no-i18n"><b class="mono">${esc(addr)}</b></span><button class="icon-btn" data-ob="copy" title="Adresse kopieren">${ico('copy')}</button>`;
+    if (id === 'op') return `<form class="row ob-op" data-ob-form="op"><input class="input" name="name" placeholder="Spielername" maxlength="16" autocomplete="off" spellcheck="false"><button class="btn btn-sm">${ico('crown')}Zum OP machen</button></form>`;
+    if (id === 'friends') return `<button class="btn btn-sm" data-ob="ports">${ico('info')}So geht die Portfreigabe</button><button class="btn btn-sm btn-ghost" data-ob="friends">Erledigt</button>`;
+    if (id === 'backup') return `<button class="btn btn-sm" data-ob="backup">${ico('archive')}Täglich sichern</button>`;
+    return '';
+  };
+  el.innerHTML = `<div class="card ob-card"><div class="card-h"><h2>Erste Schritte</h2><span class="sub">${doneN} von ${r.steps.length} erledigt</span>
+      <div class="right"><button class="btn btn-ghost btn-sm" data-ob="tour">${ico('sparkle')}Rundgang</button><button class="icon-btn" data-ob="hide" title="Ausblenden">${ico('x')}</button></div></div>
+    <div class="ob-bar"><span style="width:${(doneN / r.steps.length) * 100}%"></span></div>
+    <ol class="ob-list">${r.steps.map((x) => `<li class="${x.done ? 'done' : ''}"><span class="ob-check">${x.done ? svg('check') : ''}</span>
+      <div class="ob-text"><b>${esc(OB_STEPS[x.id][0])}</b><small>${esc(OB_STEPS[x.id][1])}</small></div>
+      <div class="ob-act">${x.done ? '' : action(x.id)}</div></li>`).join('')}</ol></div>`;
+  el.onclick = async (e) => {
+    const b = e.target.closest('[data-ob]');
+    if (!b) return;
+    const a = b.dataset.ob;
+    if (a === 'start') { await power('start'); setTimeout(() => onboardingCard(el), 1500); }
+    else if (a === 'copy') copy(addr);
+    else if (a === 'ports') portHelp(r);
+    else if (a === 'tour') startTour(true);
+    else if (a === 'friends' || a === 'hide') {
+      await run(() => post('/api/onboarding', { flag: a === 'hide' ? 'dismissed' : 'friends' }));
+      onboardingCard(el);
+    } else if (a === 'backup') {
+      if (await run(() => post('/api/panel/settings', { auto_backup_hours: 24 }), 'Automatische Backups: täglich')) onboardingCard(el);
+    }
+  };
+  el.onsubmit = async (e) => {
+    const f = e.target.closest('[data-ob-form=op]');
+    if (!f) return;
+    e.preventDefault();
+    const name = f.name.value.trim();
+    if (!name) return;
+    if (await run(() => post('/api/players/action', { action: 'op', name }), `${name} ist jetzt Operator`)) setTimeout(() => onboardingCard(el), 800);
+  };
+  hydrateIcons(el);
+}
+
+function portHelp(r) {
+  modal(`<h3>Freunde von außerhalb einladen</h3>
+    <p>Damit Freunde über das Internet joinen können, muss dein Router Verbindungen auf dem Minecraft-Port an diesen Rechner weiterleiten.</p>
+    <ol class="steps ob-steps">
+      <li>Öffne die Oberfläche deines Routers im Browser (die Adresse steht meist auf dem Gerät, z. B. 192.168.0.1 oder 192.168.178.1).</li>
+      <li>Suche den Bereich <b>Portfreigabe</b> bzw. <b>Port Forwarding</b> (oft unter „Internet“, „NAT“ oder „Freigaben“).</li>
+      <li>Lege eine Regel an: Protokoll <b>TCP</b>, Port <b class="mono no-i18n">${esc(r.port)}</b>, Ziel-Gerät <b class="mono no-i18n">${esc(r.lanIp)}</b>.</li>
+      <li>Deine öffentliche Adresse findest du z. B. auf der Router-Startseite. Ändert sie sich ständig, hilft ein DynDNS-Name (bieten viele Router an).</li>
+      <li>Trag die Adresse unter <a href="#/settings" data-close="x">Einstellungen → Start &amp; Ressourcen</a> als „Adresse für Spieler“ ein – dann zeigt Blockhaus sie überall an.</li>
+    </ol>
+    <div class="notice info">${ico('info')}<div>Gib die Adresse nur Leuten, denen du vertraust, und schalte am besten die Whitelist ein (unter „Spieler“). Ohne Portfreigabe geht es auch über ein VPN, in dem alle Mitspieler sind.</div></div>
+    <div class="btns"><button class="btn btn-primary" data-close="ok">Verstanden</button></div>`, { wide: false });
+}
+
+// ── Geführter Rundgang ──
+const TOUR = [
+  { title: 'Willkommen bei Blockhaus!', text: 'Ein kurzer Rundgang zeigt dir die wichtigsten Stellen. Du kannst ihn jederzeit beenden und später unter „Einstellungen“ erneut starten.' },
+  { sel: '#power', title: 'Starten & Stoppen', text: 'Hier startest, stoppst und startest du den Server neu. Beim Stoppen gibt es auf Wunsch einen Countdown für die Spieler.' },
+  { sel: '#status-pill', title: 'Status', text: 'Zeigt immer, ob der Server läuft, wie viele Spieler online sind und wie flüssig er läuft (TPS).' },
+  { sel: '[data-page=console]', nav: true, title: 'Konsole', text: 'Das Live-Log des Servers. Hier kannst du auch Befehle direkt eingeben – ohne Schrägstrich.' },
+  { sel: '[data-page=players]', nav: true, title: 'Spieler', text: 'Wer online ist, Whitelist, Operatoren, Banns – und für jeden Spieler Inventar, Statistiken und Notizen.' },
+  { sel: '[data-page=mods]', nav: true, title: 'Mods & Plugins', text: 'Suche und installiere Erweiterungen mit einem Klick. Blockhaus zeigt nur, was zu deiner Server-Software passt.' },
+  { sel: '[data-page=backups]', nav: true, title: 'Backups', text: 'Sicherungen der Welt – automatisch oder per Klick. Wiederherstellen geht für die ganze Welt oder nur für ein Gebiet (unter „Weltkarte 3D“).' },
+  { sel: '[data-page=updates]', nav: true, title: 'Updates & Software', text: 'Neue Minecraft-Version einspielen oder zwischen Vanilla, Fabric, Forge, NeoForge, Paper und Purpur wechseln – mit Backup vorher.' },
+  { sel: '[data-page=settings]', nav: true, title: 'Einstellungen', text: 'Arbeitsspeicher, Speicherlimit, Autostart, Sprache und alle Server-Einstellungen (server.properties).' },
+  { sel: '#open-palette', nav: true, title: 'Schnell finden', text: 'Mit Strg+K (Mac: ⌘K) springst du zu jeder Seite und Aktion. Mit „/“ davor führst du direkt einen Befehl aus.' },
+  { title: 'Fertig!', text: 'Auf der Übersicht findest du die „Ersten Schritte“ – damit ist dein Server in wenigen Minuten für dich und deine Freunde bereit. Viel Spaß!' },
+];
+
+function startTour(force) {
+  if (!force && S.tourShown) return;
+  S.tourShown = true;
+  const mobile = window.matchMedia('(max-width: 900px)').matches;
+  let i = 0;
+  const wrap = document.createElement('div');
+  wrap.className = 'tour';
+  wrap.innerHTML = '<div class="tour-hole"></div><div class="tour-bubble" role="dialog" aria-modal="true" aria-live="polite"></div>';
+  document.body.append(wrap);
+  const hole = $('.tour-hole', wrap), bub = $('.tour-bubble', wrap);
+  const finish = async () => {
+    wrap.remove();
+    window.removeEventListener('resize', place); document.removeEventListener('keydown', key, true);
+    $('#rail').classList.remove('open');
+    try { await post('/api/onboarding', { flag: 'tour' }); } catch { /* egal */ }
+  };
+  function target() {
+    const s = TOUR[i];
+    if (!s.sel) return null;
+    if (s.nav && mobile) $('#rail').classList.add('open');
+    const el = $(s.sel);
+    return el && el.getClientRects().length ? el : null;
+  }
+  function place() {
+    const el = target(), pad = 6;
+    if (el) {
+      el.scrollIntoView({ block: 'nearest' });
+      const r = el.getBoundingClientRect();
+      Object.assign(hole.style, { display: 'block', left: `${r.left - pad}px`, top: `${r.top - pad}px`, width: `${r.width + pad * 2}px`, height: `${r.height + pad * 2}px` });
+      const bw = Math.min(340, window.innerWidth - 32), bh = bub.offsetHeight || 180;
+      let left = r.right + 16, top = r.top;
+      if (left + bw > window.innerWidth - 16) { left = Math.max(16, Math.min(r.left, window.innerWidth - bw - 16)); top = r.bottom + 14; }
+      if (top + bh > window.innerHeight - 16) top = Math.max(16, r.top - bh - 14);
+      Object.assign(bub.style, { left: `${left}px`, top: `${top}px`, width: `${bw}px`, transform: 'none' });
+    } else {
+      Object.assign(hole.style, { display: 'block', left: '50%', top: '50%', width: '0px', height: '0px' });
+      Object.assign(bub.style, { left: '50%', top: '50%', width: `${Math.min(380, window.innerWidth - 32)}px`, transform: 'translate(-50%, -50%)' });
+    }
+  }
+  function show() {
+    const s = TOUR[i];
+    bub.innerHTML = `<div class="tour-n">${i + 1} / ${TOUR.length}</div><h3>${esc(s.title)}</h3><p>${esc(s.text)}</p>
+      <div class="tour-btns"><button class="btn btn-ghost btn-sm" data-t="end">${i === TOUR.length - 1 ? 'Schließen' : 'Rundgang beenden'}</button><span class="grow"></span>
+      ${i > 0 ? '<button class="btn btn-sm" data-t="back">Zurück</button>' : ''}<button class="btn btn-primary btn-sm" data-t="next">${i === TOUR.length - 1 ? 'Los geht’s' : 'Weiter'}</button></div>`;
+    if (!TOUR[i].nav || !mobile) $('#rail').classList.remove('open');
+    requestAnimationFrame(place);
+    setTimeout(() => $('[data-t=next]', bub).focus(), 30);
+  }
+  const key = (e) => {
+    if (e.key === 'Escape') { e.stopPropagation(); finish(); }
+    else if (e.key === 'ArrowRight') { e.preventDefault(); next(); }
+    else if (e.key === 'ArrowLeft' && i > 0) { e.preventDefault(); i--; show(); }
+  };
+  const next = () => { if (i >= TOUR.length - 1) finish(); else { i++; show(); } };
+  bub.onclick = (e) => {
+    const b = e.target.closest('[data-t]');
+    if (!b) return;
+    if (b.dataset.t === 'end') finish(); else if (b.dataset.t === 'back') { i--; show(); } else next();
+  };
+  window.addEventListener('resize', place);
+  document.addEventListener('keydown', key, true);
+  show();
+}
+
+// Rundgang beim ersten Besuch nach der Einrichtung automatisch anbieten
+async function maybeTour() {
+  if (!S.me || !S.me.hasServer || S.tourShown) return;
+  try { const r = await api('/api/onboarding'); if (!r.tourDone) setTimeout(() => startTour(false), 600); } catch { /* egal */ }
 }
 
 i18nInit().then(boot);
