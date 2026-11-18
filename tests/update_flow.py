@@ -8,6 +8,7 @@ import http.cookiejar
 import json
 import sys
 import time
+import urllib.error
 import urllib.request
 
 port, want = int(sys.argv[1]), sys.argv[2]
@@ -19,8 +20,11 @@ csrf = ""
 def call(path, body=None):
     req = urllib.request.Request(base + path, data=None if body is None else json.dumps(body).encode(),
                                  headers={"Content-Type": "application/json", "X-CSRF": csrf})
-    with op.open(req, timeout=60) as r:
-        return json.loads(r.read() or b"{}")
+    try:
+        with op.open(req, timeout=60) as r:
+            return json.loads(r.read() or b"{}")
+    except urllib.error.HTTPError as e:
+        sys.exit("FEHLER bei %s: HTTP %d %s" % (path, e.code, e.read().decode(errors="replace")[:500]))
 
 
 def status(timeout=2):
