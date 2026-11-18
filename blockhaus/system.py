@@ -326,10 +326,15 @@ def _remove_program(h):
                     "".join('del /q "%s"\r\n' % s for s in shortcuts) + 'del "%~f0"\r\n')
         subprocess.Popen(["cmd", "/c", script], creationflags=0x08000000 | 0x00000008, close_fds=True)
         return
+    wrapper = os.path.expanduser("~/.local/bin/blockhaus")  # von install.sh (Linux und macOS)
+    try:
+        with open(wrapper, encoding="utf-8") as f:
+            if h in f.read():
+                _rm(wrapper)
+    except OSError:
+        pass
     if osutil.IS_LINUX:
-        for p in (os.path.expanduser("~/.local/share/applications/blockhaus.desktop"),
-                  os.path.expanduser("~/.local/bin/blockhaus")):
-            _rm(p)
+        _rm(os.path.expanduser("~/.local/share/applications/blockhaus.desktop"))
     # macOS: h liegt in Blockhaus.app/Contents/Resources – das ganze App-Paket entfernen
     root = h
     if osutil.IS_MAC and h.endswith(os.path.join("Contents", "Resources")):

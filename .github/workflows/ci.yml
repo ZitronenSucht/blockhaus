@@ -100,7 +100,7 @@ jobs:
           & $py build\blockhaus\launch.py uninstall --yes --delete-worlds --keep-program
           Start-Sleep 2
           if (Test-Path $env:BLOCKHAUS_DATA) { throw "Daten nicht entfernt" }
-          & $py -c "import webview; print('pywebview', webview.__version__)"
+          & $py -c "import webview; print('pywebview ok')"
       - uses: actions/upload-artifact@v4
         with:
           name: pakete-${{ matrix.os }}
