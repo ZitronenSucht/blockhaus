@@ -415,7 +415,8 @@ function srvState(st) {
     default: return ['unknown', 'Verbinde …'];
   }
 }
-const mcube = (lg) => `<span class="mcube${lg ? ' lg' : ''}"><span class="mc-b"><i class="fr"></i><i class="bk"></i><i class="l"></i><i class="r"></i><i class="t"></i><i class="bo"></i></span></span>`;
+const MCUBE_SVG = '<svg viewBox="0 0 100 100" aria-hidden="true"><ellipse class="sh" cx="50" cy="97" rx="30" ry="4.5"/><g class="blk"><path class="t" d="M50 12 86 32 50 52 14 32z"/><path class="l" d="M14 32 50 52v40L14 72z"/><path class="r" d="M86 32 50 52v40l36-20z"/><path class="lt d" d="M26 78.7 38 85.3V63.3L26 56.7z"/><path class="lt w" d="M60 64.4 74 56.7V44.7L60 52.4z"/></g></svg>';
+const mcube = (lg) => `<span class="mcube${lg ? ' lg' : ''}">${MCUBE_SVG}</span>`;
 function setStatusPill(cls, label, sub) {
   const p = $('#status-pill');
   p.className = 'status-pill st-' + cls + (S.stats.state === 'failed' ? ' crashed' : '');

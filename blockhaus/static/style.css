@@ -653,31 +653,54 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
   linear-gradient(180deg, rgba(255, 255, 255, .25) 0 2px, transparent 2px 6px, rgba(0, 0, 0, .2) 6px); }
 
 /* ── 3. Lebender Status-Block ── */
-.mcube { --s: 14px; display: inline-block; width: var(--s); height: var(--s); perspective: 300px; flex: none; }
-.mcube.lg { --s: 34px; }
-.mc-b { display: block; position: relative; width: 100%; height: 100%; transform-style: preserve-3d; transform: rotateX(-24deg) rotateY(45deg); }
-.mc-b i { position: absolute; inset: 0; background-size: cover; image-rendering: pixelated; background-color: #6b4f2f; }
-.mc-b .fr { transform: translateZ(calc(var(--s) / 2)); }
-.mc-b .bk { transform: rotateY(180deg) translateZ(calc(var(--s) / 2)); }
-.mc-b .l { transform: rotateY(-90deg) translateZ(calc(var(--s) / 2)); filter: brightness(.78); }
-.mc-b .r { transform: rotateY(90deg) translateZ(calc(var(--s) / 2)); filter: brightness(.78); }
-.mc-b .t { transform: rotateX(90deg) translateZ(calc(var(--s) / 2)); }
-.mc-b .bo { transform: rotateX(-90deg) translateZ(calc(var(--s) / 2)); filter: brightness(.55); }
-.mc-b i:not(.t):not(.bo) { background-image: url('/api/texture?p=block/grass_block_side'); }
-.mc-b .t { background: #7cbd5b url('/api/texture?p=block/grass_block_top') 0 0 / cover; background-blend-mode: multiply; }
-.mc-b .bo { background-image: url('/api/texture?p=block/dirt'); }
-.st-starting .mc-b i { animation: mcbuild 1.6s ease-in-out infinite; }
-.st-starting .mc-b .t { animation-delay: .25s; }
-@keyframes mcbuild { 0% { opacity: 0; translate: 0 calc(var(--s) * -.8); } 45%, 100% { opacity: 1; translate: 0 0; } }
-.st-stopping .mc-b i { animation: mcbreak 1.4s ease-in infinite; }
-@keyframes mcbreak { 0%, 30% { opacity: 1; scale: 1; } 100% { opacity: 0; scale: .4; translate: 0 calc(var(--s) * .8); } }
-.st-offline .mc-b, .st-unknown .mc-b { filter: grayscale(1) brightness(.55); }
-.st-offline.crashed .mc-b { filter: none; }
-.crashed .mc-b i:not(.t):not(.bo) { background-image: url('/api/texture?p=block/tnt_side'); }
-.crashed .mc-b .t { background: url('/api/texture?p=block/tnt_top') 0 0 / cover; }
-.crashed .mc-b .bo { background-image: url('/api/texture?p=block/tnt_bottom'); }
-.crashed .mc-b { animation: tnt .9s steps(1) infinite; }
-@keyframes tnt { 50% { filter: brightness(2.2) saturate(.2); } }
+/* Status-Symbol: das Blockhaus-Logo. Startet: Block setzt sich zusammen, dann gehen die Lichter an.
+   Online: schwebt, Fenster leuchten. Stoppt: Lichter aus, Block fällt auseinander. Abgestürzt: rotes Warnlicht. */
+.mcube { --s: 15px; --lit: #ffd27a; --unlit: #2b332f; display: inline-block; width: var(--s); height: var(--s); flex: none; }
+.mcube.lg { --s: 40px; }
+.mcube svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.mcube svg * { transform-box: fill-box; transform-origin: center; }
+.mcube .t { fill: #7fe0a8; } .mcube .l { fill: #3bb273; } .mcube .r { fill: #1f7a4d; }
+.mcube .lt { fill: var(--unlit); } .mcube .sh { fill: currentColor; opacity: 0; }
+/* Offline / unbekannt: grau, Lichter aus */
+.st-offline .mcube .t, .st-unknown .mcube .t { fill: #9aa49f; }
+.st-offline .mcube .l, .st-unknown .mcube .l { fill: #7a847f; }
+.st-offline .mcube .r, .st-unknown .mcube .r { fill: #5c6661; }
+/* Startet */
+.st-starting .mcube .t { animation: hb-top 2.4s cubic-bezier(.2,.8,.2,1) infinite; }
+.st-starting .mcube .l { animation: hb-left 2.4s cubic-bezier(.2,.8,.2,1) infinite; }
+.st-starting .mcube .r { animation: hb-right 2.4s cubic-bezier(.2,.8,.2,1) infinite; }
+.st-starting .mcube .lt.d { animation: hb-lit 2.4s infinite; }
+.st-starting .mcube .lt.w { animation: hb-lit-w 2.4s infinite; }
+@keyframes hb-top { 0% { opacity: 0; transform: translateY(-45%); } 30%, 100% { opacity: 1; transform: none; } }
+@keyframes hb-left { 0%, 6% { opacity: 0; transform: translate(-45%, 22%); } 36%, 100% { opacity: 1; transform: none; } }
+@keyframes hb-right { 0%, 12% { opacity: 0; transform: translate(45%, 22%); } 42%, 100% { opacity: 1; transform: none; } }
+@keyframes hb-lit { 0%, 40% { opacity: 0; fill: var(--unlit); } 46% { opacity: 1; fill: var(--unlit); } 52% { fill: var(--lit); } 56% { fill: var(--unlit); } 62%, 100% { opacity: 1; fill: var(--lit); } }
+@keyframes hb-lit-w { 0%, 40% { opacity: 0; fill: var(--unlit); } 50% { opacity: 1; fill: var(--unlit); } 60% { fill: var(--lit); } 64% { fill: var(--unlit); } 70%, 100% { opacity: 1; fill: var(--lit); } }
+/* Online */
+.st-online .mcube .blk { animation: hb-float 3.6s ease-in-out infinite; }
+.st-online .mcube .sh { opacity: .16; animation: hb-shadow 3.6s ease-in-out infinite; }
+.st-online .mcube .lt { fill: var(--lit); animation: hb-glow 3.6s ease-in-out infinite; }
+@keyframes hb-float { 50% { transform: translateY(-7%); } }
+@keyframes hb-shadow { 50% { transform: scaleX(.78); opacity: .08; } }
+@keyframes hb-glow { 50% { filter: drop-shadow(0 0 2px #ffcf6e) brightness(1.1); } }
+/* Stoppt */
+.st-stopping .mcube .lt.w { animation: hb-unlit 2.4s infinite; }
+.st-stopping .mcube .lt.d { animation: hb-unlit-d 2.4s infinite; }
+.st-stopping .mcube .t { animation: hb-apart-t 2.4s ease-in infinite; }
+.st-stopping .mcube .l { animation: hb-apart-l 2.4s ease-in infinite; }
+.st-stopping .mcube .r { animation: hb-apart-r 2.4s ease-in infinite; }
+@keyframes hb-unlit { 0%, 8% { fill: var(--lit); } 20%, 100% { fill: var(--unlit); } 40%, 100% { opacity: 0; } }
+@keyframes hb-unlit-d { 0%, 18% { fill: var(--lit); } 30%, 100% { fill: var(--unlit); } 40%, 100% { opacity: 0; } }
+@keyframes hb-apart-t { 0%, 38% { opacity: 1; transform: none; } 88%, 100% { opacity: 0; transform: translateY(-40%); } }
+@keyframes hb-apart-l { 0%, 42% { opacity: 1; transform: none; } 92%, 100% { opacity: 0; transform: translate(-40%, 25%) rotate(-10deg); } }
+@keyframes hb-apart-r { 0%, 46% { opacity: 1; transform: none; } 96%, 100% { opacity: 0; transform: translate(40%, 25%) rotate(10deg); } }
+/* Abgestürzt */
+.crashed .mcube .t { fill: #7fe0a8; } .crashed .mcube .l { fill: #3bb273; } .crashed .mcube .r { fill: #1f7a4d; }
+.crashed .mcube .lt { animation: hb-alarm .8s steps(1) infinite; }
+.crashed .mcube .blk { animation: hb-shake .45s infinite; }
+@keyframes hb-alarm { 0% { fill: #ff5a4f; } 50% { fill: var(--unlit); } }
+@keyframes hb-shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-5%); } 75% { transform: translateX(5%); } }
+@media (prefers-reduced-motion: reduce) { .mcube * { animation: none !important; } .st-starting .mcube .lt, .st-online .mcube .lt { fill: var(--lit); } }
 .hero-state .mcube { margin: 0 6px 0 4px; }
 
 /* ── 4. Minecraft-Toasts ── */

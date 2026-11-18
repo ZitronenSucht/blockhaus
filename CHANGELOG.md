@@ -2,7 +2,10 @@
 
 ## 0.1.2
 
-- Behoben: Unter Linux startete Blockhaus nach einem Update oder „Panel neu starten“ teils nicht wieder (wenn es nicht als eigener Dienst lief)
+- Neue Status-Animation: Der Blockhaus-Block setzt sich beim Start zusammen und macht das Licht an, schwebt online und fällt beim Stoppen auseinander – ohne Minecraft-Texturen, sieht also sofort nach der Installation richtig aus
+- Behoben: In den Einstellungen lief der Text der Karte „Blockhaus“ bei schmalen Fenstern über den Rand
+- Behoben: Unter Linux startete Blockhaus nach einem Update oder „Panel neu starten“ teils nicht wieder
+- New status animation; settings cards no longer overflow on narrow windows; Linux restart after updates fixed
 
 ## 0.1.1
 
