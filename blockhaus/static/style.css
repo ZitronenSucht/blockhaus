@@ -1026,3 +1026,12 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 .tour-bubble p { margin: 0 0 14px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
 .tour-n { color: var(--muted); font-size: 12px; font-weight: 600; }
 .tour-btns { display: flex; align-items: center; gap: 8px; }
+
+/* Einstellungen → Blockhaus: bricht auf jeder Fensterbreite sauber um */
+.sys-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 22px; }
+.sys-grid > section { min-width: 0; }
+.sys-grid .notice > div { min-width: 0; overflow-wrap: anywhere; }
+.sys-toggle { display: flex; gap: 12px; align-items: flex-start; margin-top: 16px; font-size: 14px; }
+.sys-paths { display: flex; flex-direction: column; gap: 10px; }
+.sys-paths small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+.sys-paths code { display: block; font-family: var(--mono); font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; word-break: break-all; }

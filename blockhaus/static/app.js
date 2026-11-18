@@ -3577,7 +3577,7 @@ async function resourcesCard(el) {
   const mb2gb = (m) => num(m / 1024, m % 1024 ? 1 : 0) + ' GB';
   let ram = st.ram_max_mb || st.ramEffectiveMb;
   el.innerHTML = `<div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Start &amp; Ressourcen</h2><span class="sub">Blockhaus ${esc(S.me.appVersion || '')}</span></div>
-    <div class="grid g-2" style="gap:22px">
+    <div class="sys-grid">
       <div>
         <div class="field"><span>Arbeitsspeicher für Minecraft (wirkt nach Neustart)</span>
           <div class="ram-row"><input type="range" id="r-ram" min="1024" max="${max}" step="512" value="${ram}" ${st.control === 'systemd' ? 'disabled' : ''}><b class="mono" id="r-ramv">${mb2gb(ram)}</b></div>
@@ -3775,18 +3775,18 @@ async function systemCard(el) {
   try { r = await api('/api/system'); } catch (e) { el.innerHTML = ''; return; }
   const inst = r.install;
   el.innerHTML = `<div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Blockhaus</h2><span class="sub no-i18n">Version ${esc(r.version)}</span></div>
-    <div class="grid g-2" style="gap:22px">
-      <div>
-        <div class="row" style="gap:10px"><button class="btn btn-sm" id="y-check">${ico('refresh')}Nach Updates suchen</button><span id="y-upd" class="muted" style="font-size:13px"></span></div>
+    <div class="sys-grid">
+      <section>
+        <div class="row" style="gap:10px;flex-wrap:wrap"><button class="btn btn-sm" id="y-check">${ico('refresh')}Nach Updates suchen</button><span id="y-upd" class="muted" style="font-size:13px"></span></div>
         <div id="y-upd-box"></div>
         ${inst.installed ? '' : '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Aus dem Quellcode gestartet – Updates kommen hier über git.</p>'}
-        <label class="row" style="margin-top:16px"><span class="switch"><input type="checkbox" id="y-auto" ${r.autostart ? 'checked' : ''}><span></span></span><span>Blockhaus beim Start des Rechners im Hintergrund starten<br><small class="muted">${esc({ Windows: 'beim Anmelden bei Windows', macOS: 'beim Anmelden am Mac', Linux: 'beim Hochfahren (systemd-Benutzerdienst)' }[r.os] || '')}</small></span></label>
+        <label class="sys-toggle"><span class="switch"><input type="checkbox" id="y-auto" ${r.autostart ? 'checked' : ''}><span></span></span><span>Blockhaus beim Start des Rechners im Hintergrund starten<br><small class="muted">${esc({ Windows: 'beim Anmelden bei Windows', macOS: 'beim Anmelden am Mac', Linux: 'beim Hochfahren (systemd-Benutzerdienst)' }[r.os] || '')}</small></span></label>
         <p class="muted" style="font-size:12.5px;margin:8px 0 0">Zusammen mit „Server mit Blockhaus automatisch starten“ läuft dein Minecraft-Server dann immer, wenn der Rechner an ist.</p>
-      </div>
-      <div class="wiz-toggles" style="margin:0">
-        <dl class="kv no-i18n" style="margin:0"><dt>${tr('Daten')}</dt><dd class="mono" style="font-size:12px;word-break:break-all">${esc(r.dataDir)}</dd>${inst.home ? `<dt>${tr('Programm')}</dt><dd class="mono" style="font-size:12px;word-break:break-all">${esc(inst.home)}</dd>` : ''}</dl>
-        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sm" id="y-quit">${ico('logout')}Blockhaus beenden</button><button class="btn btn-sm btn-danger" id="y-uninst">${ico('trash')}Deinstallieren</button></div>
-      </div>
+      </section>
+      <section>
+        <div class="sys-paths"><div><small>${tr('Daten')}</small><code class="no-i18n">${esc(r.dataDir)}</code></div>${inst.home ? `<div><small>${tr('Programm')}</small><code class="no-i18n">${esc(inst.home)}</code></div>` : ''}</div>
+        <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:14px"><button class="btn btn-sm" id="y-quit">${ico('logout')}Blockhaus beenden</button><button class="btn btn-sm btn-danger" id="y-uninst">${ico('trash')}Deinstallieren</button></div>
+      </section>
     </div></div>`;
   hydrateIcons(el);
   const showUpd = (u) => {
