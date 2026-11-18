@@ -75,7 +75,8 @@ jobs:
           tag="${GITHUB_REF_NAME}"; ver="${tag#v}"; ver="${ver%-pre}"; pre=""
           if [ "$tag" != "${tag%-pre}" ]; then pre="--prerelease"; fi
           notes=$(python packaging/release_notes.py "v$ver")
-          [ -n "$pre" ] && notes="**Vorab-Version zum Testen / Pre-release for testing.** Linux/macOS: \`curl -fsSL https://github.com/ZitronenSucht/blockhaus/releases/download/$tag/install.sh | sh -s -- --version ${ver}-pre\`
-
-$notes"
+          if [ -n "$pre" ]; then
+            head="**Vorab-Version zum Testen / Pre-release for testing.** Linux/macOS: \`curl -fsSL https://github.com/ZitronenSucht/blockhaus/releases/download/$tag/install.sh | sh -s -- --version ${ver}-pre\`"
+            notes=$(printf '%s\n\n%s' "$head" "$notes")
+          fi
           gh release create "$tag" release/* $pre --title "Blockhaus $ver${pre:+ (Vorab-Version)}" --notes "$notes"
