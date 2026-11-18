@@ -17,6 +17,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 
@@ -183,8 +184,28 @@ def ver_tuple(v):
     return tuple(out + [0] * (3 - len(out)))
 
 
+def _latest_via_web():
+    """Ausweichweg ohne GitHub-API (deren Limit: 60 Abfragen/Stunde je IP): /releases/latest leitet auf den
+    Tag des neuesten Releases weiter; Downloads und Prüfsummen kommen ohnehin von github.com."""
+    req = urllib.request.Request("https://github.com/%s/releases/latest" % REPO, headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=30) as r:
+        final = r.geturl()
+    tag = final.rstrip("/").rsplit("/", 1)[-1]
+    if not tag.startswith("v"):
+        return None
+    ver = tag[1:]
+    base = "https://github.com/%s/releases/download/%s/" % (REPO, tag)
+    return {"version": ver, "notes": "", "url": final, "published": None,
+            "app": base + APP_ASSET % ver, "sums": base + SUMS_ASSET}
+
+
 def latest_release(include_pre=False):
-    rels = json.loads(_get(RELEASES + "?per_page=10"))
+    try:
+        rels = json.loads(_get(RELEASES + "?per_page=10"))
+    except urllib.error.HTTPError as e:
+        if e.code in (403, 429) and not include_pre:  # API-Limit erreicht
+            return _latest_via_web()
+        raise
     for r in rels:
         if r.get("draft") or (r.get("prerelease") and not include_pre):
             continue

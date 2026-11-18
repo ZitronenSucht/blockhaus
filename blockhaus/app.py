@@ -5783,7 +5783,12 @@ def r_system_update(h, s, q):
         raise ApiError("Updates gibt es nur für installierte Versionen (nicht beim Start aus dem Quellcode)")
     if update_lock.locked():
         raise ApiError("Es läuft bereits eine Aufgabe")
-    info = system.check_update(VERSION)
+    info = _update["info"] if _update["info"] and now() - _update["checked"] < 600 else None
+    if not info:  # nur neu fragen, wenn die letzte Prüfung älter als 10 Minuten ist
+        try:
+            info = system.check_update(VERSION)
+        except Exception as e:
+            raise ApiError("Update-Prüfung nicht möglich: %s" % e, 502)
     if not info.get("available"):
         raise ApiError("Keine Updates verfügbar")
     act(h, s, "blockhaus-update", "%s → %s" % (VERSION, info["version"]))

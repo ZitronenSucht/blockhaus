@@ -260,6 +260,17 @@ class TestUpdater(unittest.TestCase):
             else:
                 os.environ["BLOCKHAUS_HOME"] = old
         self.assertGreater(system.ver_tuple("0.10.0"), system.ver_tuple("0.9.3"))
+        # API-Limit erreicht → Ausweichweg über die Release-Seite
+        import urllib.error
+        orig_get, orig_web = system._get, system._latest_via_web
+        try:
+            def limited(url, timeout=30):
+                raise urllib.error.HTTPError(url, 403, "rate limit exceeded", {}, None)
+            system._get = limited
+            system._latest_via_web = lambda: {"version": "9.9.9", "app": "a", "sums": "s", "notes": "", "url": "u"}
+            self.assertTrue(system.check_update("0.1.0")["available"])
+        finally:
+            system._get, system._latest_via_web = orig_get, orig_web
         self.assertEqual(system.ver_tuple("v1.2"), (1, 2, 0))
 
 
