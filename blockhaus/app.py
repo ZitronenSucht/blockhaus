@@ -341,6 +341,7 @@ class Rcon:
         if p.get("enable-rcon") != "true" or not p.get("rcon.password"):
             raise RconError("RCON ist nicht aktiviert")
         self.sock = socket.create_connection(("127.0.0.1", int(p.get("rcon.port", 25575))), timeout=4)
+        self.sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sent = self._send(3, p["rcon.password"])
         rid, _, _ = self._recv()
         if rid == -1 or rid != sent:
@@ -355,14 +356,18 @@ class Rcon:
                     if not self.sock:
                         self._connect()
                     cid = self._send(2, command)
-                    marker = self._send(200, "")  # Ende-Markierung für mehrteilige Antworten
-                    parts = []
+                    # Erst die erste Antwort abwarten, dann die Ende-Markierung schicken: Minecraft liest pro
+                    # Lesevorgang nur ein Paket – kommen Befehl und Markierung zusammen an (unter macOS häufig),
+                    # schließt der Server die Verbindung.
+                    parts, marker = [], None
                     while True:
                         rid, _, body = self._recv()
-                        if rid == marker:
-                            break
                         if rid == cid:
                             parts.append(body)
+                            if marker is None:
+                                marker = self._send(200, "")  # mehrteilige Antworten: alles bis zur Markierung
+                        elif marker is not None and rid == marker:
+                            break
                     return COLOR_RE.sub("", "".join(parts))
                 except RconError as e:
                     self._note(e)

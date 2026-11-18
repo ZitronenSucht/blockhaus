@@ -171,6 +171,56 @@ class TestI18n(unittest.TestCase):
         self.assertEqual(app.tr_msg("Etwas ganz anderes", "en"), "Etwas ganz anderes")
 
 
+class TestRcon(unittest.TestCase):
+    """RCON gegen einen Server, der sich wie Minecraft verhält: genau ein Paket pro Lesevorgang,
+    sonst wird die Verbindung geschlossen (unter macOS kamen Befehl und Markierung oft zusammen an)."""
+
+    def test_strict_server(self):
+        import struct
+        import threading
+        from blockhaus import app
+
+        def pkt(rid, typ, body):
+            d = struct.pack("<ii", rid, typ) + body.encode() + b"\0\0"
+            return struct.pack("<i", len(d)) + d
+        closed = []
+
+        def client(c):
+            while True:
+                b = c.recv(1460)
+                if len(b) < 10:
+                    break
+                if struct.unpack("<i", b[:4])[0] != len(b) - 4:
+                    closed.append(1)
+                    break
+                rid, typ = struct.unpack("<ii", b[4:12])
+                body = b[12:-2].decode()
+                if typ == 3:
+                    c.sendall(pkt(rid if body == "pw" else -1, 2, ""))
+                elif typ == 2:
+                    c.sendall(pkt(rid, 0, "x" * 5000 if body == "big" else "ok:" + body))
+                else:
+                    c.sendall(pkt(rid, 0, "Unknown request %x" % typ))
+            c.close()
+        srv = socket.socket()
+        srv.bind(("127.0.0.1", 0))
+        srv.listen()
+        port = srv.getsockname()[1]
+        threading.Thread(target=lambda: [threading.Thread(target=client, args=(srv.accept()[0],), daemon=True).start()
+                                         for _ in iter(int, 1)], daemon=True).start()
+        sdir = app.CONF["server_dir"]
+        os.makedirs(sdir, exist_ok=True)
+        with open(os.path.join(sdir, "server.properties"), "w") as f:
+            f.write("enable-rcon=true\nrcon.password=pw\nrcon.port=%d\n" % port)
+        app.RCON.close()
+        for i in range(200):
+            self.assertEqual(app.RCON.cmd("say %d" % i), "ok:say %d" % i)
+        self.assertEqual(len(app.RCON.cmd("big")), 5000)
+        self.assertEqual(closed, [], "Server musste Verbindungen wegen zusammengefasster Pakete schließen")
+        app.RCON.close()
+        os.remove(os.path.join(sdir, "server.properties"))
+
+
 class TestUpdater(unittest.TestCase):
     def test_apply_update_and_rollback_files(self):
         import hashlib
