@@ -960,3 +960,42 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 .ie-color { width: 38px; height: 32px; padding: 2px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--bg-2); cursor: pointer; }
 .sl-drop { border-radius: var(--r-sm); padding: 4px; margin: -4px; }
 @media (max-width: 760px) { .ie { grid-template-columns: 1fr; } .ie-left { width: 100%; max-width: 360px; margin: 0 auto; } }
+
+/* Einrichtung & Assistent „Server erstellen“ */
+.setup-card { width: min(440px, 100%); }
+.setup-h { margin: 4px 0 6px; font-size: 22px; }
+.setup-p { margin: 0 0 18px; color: var(--text-2); font-size: 14px; line-height: 1.5; }
+.field-hint { display: block; margin-top: 6px; color: var(--muted); font-size: 12px; }
+.wiz { padding: 0; overflow: hidden; }
+.wiz-steps { list-style: none; margin: 0; padding: 14px 18px; display: flex; flex-wrap: wrap; gap: 6px 18px; border-bottom: 1px solid var(--line); background: var(--surface-2); }
+.wiz-steps li { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 600; }
+.wiz-steps li span { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--surface-3); color: var(--text-2); font-size: 12px; }
+.wiz-steps li span svg { width: 13px; height: 13px; }
+.wiz-steps li.on { color: var(--text); }
+.wiz-steps li.on span { background: var(--accent); color: var(--accent-ink); }
+.wiz-steps li.done span { background: var(--accent-soft); color: var(--accent); }
+.wiz-body { padding: 22px 22px 8px; min-height: 260px; }
+.wiz-h { margin: 0 0 6px; font-size: 19px; }
+.wiz-p { margin: 0 0 16px; color: var(--text-2); font-size: 14px; line-height: 1.5; max-width: 720px; }
+.wiz-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; max-width: 720px; }
+.wiz-grid .span-2 { grid-column: span 2; }
+.wiz-toggles { display: flex; flex-direction: column; gap: 12px; margin-top: 10px; font-size: 14px; }
+.wiz-toggles .row { align-items: flex-start; gap: 12px; flex-wrap: nowrap; }
+.wiz-foot { display: flex; align-items: center; gap: 12px; padding: 14px 22px; border-top: 1px solid var(--line); }
+.wiz-foot #w-msg { font-size: 13px; color: var(--red); }
+.wiz-sum { max-width: 560px; }
+.ram-row { display: flex; align-items: center; gap: 14px; max-width: 560px; }
+.ram-row input { flex: 1; accent-color: var(--accent); }
+.ram-row b { min-width: 64px; text-align: right; font-size: 15px; }
+.ram-scale { display: flex; justify-content: space-between; max-width: 480px; color: var(--muted); font-size: 12px; margin-top: 2px; }
+.ram-note { margin-top: 8px; font-size: 13px; }
+.ram-note .ico, .warn-t .ico { width: 14px; height: 14px; vertical-align: -2px; margin-right: 5px; }
+.warn-t { color: var(--gold); }
+.eula { margin-top: 18px; gap: 10px; align-items: flex-start; flex-wrap: nowrap; font-size: 14px; line-height: 1.45; }
+.eula input, .wiz-body input[type=checkbox]:not(.switch input) { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
+.wiz-progress { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 6px; padding: 20px 0 14px; }
+.wiz-progress .console { width: min(640px, 100%); margin: 8px 0; }
+.spinner.lg { width: 34px; height: 34px; border-width: 3px; margin-bottom: 8px; }
+.wiz-ok { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); margin-bottom: 6px; }
+.wiz-ok .ico { width: 28px; height: 28px; }
+@media (max-width: 640px) { .wiz-grid { grid-template-columns: 1fr; } .wiz-grid .span-2 { grid-column: auto; } .wiz-body { padding: 18px 16px 6px; } .wiz-foot { padding: 12px 16px; } }

@@ -457,6 +457,11 @@ class ServerProcess:
                 except subprocess.TimeoutExpired:
                     pass
             was_stopping = self.stopping
+            if self.proc and self.proc.stdin:
+                try:
+                    self.proc.stdin.close()
+                except OSError:
+                    pass
             self.proc, self.pid, self.exit_code = None, 0, code
             self.state = "inactive" if was_stopping or code in (0, 130, 143, -2, -15) else "failed"
             _rm(self.pid_file)

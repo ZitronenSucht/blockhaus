@@ -68,6 +68,8 @@ DEFAULT_CONF = {
     "autostart": False,              # Minecraft-Server beim Start von Blockhaus mitstarten
     "auto_restart": True,            # nach einem Absturz automatisch neu starten
     "https": False,
+    "storage_max_gb": None,          # Speicherlimit für Welt + Backups (None = keins)
+    "language": "de",
 }
 
 SYSTEMCTL = "/usr/bin/systemctl"
@@ -669,6 +671,14 @@ class Sampler:
             "diskTotal": du.total, "diskFree": du.free, "load": self.m.load(), "ncpu": self.ncpu,
         }
         st["lastCrash"] = last_crash_time()
+        lim = storage_limit()
+        if lim:  # Ordnergrößen werden höchstens alle 10 Minuten neu gezählt
+            used = storage_used()
+            st["storage"] = {"used": used, "max": lim}
+            if used >= lim * 0.9 and now() - getattr(self, "storage_warned", 0) > 3600:
+                self.storage_warned = now()
+                HUB.push_log("Speicher fast voll: %.1f von %s GB belegt (Welt + Backups)"
+                             % (used / 1024 ** 3, CONF.get("storage_max_gb")), "err")
         st["modsPending"] = restart_needed() if state == "active" else False
         heap = jvm_heap(pid) if pid and state in ("active", "deactivating") else None
         if heap:
@@ -855,6 +865,7 @@ def make_backup(label="manual", user="system"):
     try:
         HUB.set_task({"kind": "backup", "msg": "Backup wird erstellt …", "t": now()})
         os.makedirs(CONF["backup_dir"], exist_ok=True)
+        storage_check(label)
         level = read_props().get("level-name", "world")
         running = svc_info().get("ActiveState") == "active"
         if running and rcon_try("save-off") is not None:
@@ -1465,6 +1476,11 @@ class Handler(BaseHTTPRequestHandler):
                 return self.static(path)
             if path == "/api/login" and method == "POST":
                 return self.login()
+            if path in ("/api/setup/status", "/api/setup/admin"):  # öffentlich: erster Start
+                fn = ROUTES.get((method, path))
+                if not fn:
+                    raise ApiError("Methode nicht erlaubt", 405)
+                return fn(self, None, q)
             s = self.session()
             if not s:
                 raise ApiError("Nicht angemeldet", 401)
@@ -1564,12 +1580,16 @@ class Handler(BaseHTTPRequestHandler):
             audit(user or "?", ip, "login-fehlgeschlagen")
             time.sleep(0.6)
             raise ApiError("Benutzername oder Passwort falsch", 401)
+        with sess_lock:
+            FAILS.pop(ip, None)
+        audit(user, ip, "login")
+        self.start_session(user)
+
+    def start_session(self, user):
         tok = secrets.token_urlsafe(32)
         with sess_lock:
             SESSIONS[tok] = {"user": user, "csrf": secrets.token_urlsafe(24), "last": now(), "created": now(),
-                             "ip": ip}
-            FAILS.pop(ip, None)
-        audit(user, ip, "login")
+                             "ip": self.ip()}
         self.json({"ok": True}, extra={
             "Set-Cookie": "wb_session=%s; HttpOnly; SameSite=Strict; Path=/; Max-Age=%d%s"
                           % (tok, CONF["session_hours"] * 3600, "; Secure" if self.server.tls else "")})
@@ -1602,8 +1622,9 @@ def r_logout(h, s, q):
 @api("GET", "/api/me")
 def r_me(h, s, q):
     p = read_props()
-    h.json({"user": s["user"], "csrf": s["csrf"], "address": CONF.get("public_address"),
-            "port": p.get("server-port"), "motd": p.get("motd"), "version": server_version()})
+    h.json({"user": s["user"], "csrf": s["csrf"], "address": CONF.get("public_address") or osutil.lan_ip(),
+            "port": p.get("server-port"), "motd": p.get("motd"), "version": server_version(),
+            "hasServer": has_server(), "language": CONF.get("language", "de"), "appVersion": VERSION})
 
 
 def server_version():
@@ -5223,6 +5244,338 @@ def r_mr_recommended(h, s, q):
     h.json({"mods": val, "installed": have, "mc": mc, "loader": ld, "loaderName": L["name"], "kind": L["kind"]})
 
 
+# ═════════════════════════ Einrichtung (erster Start) & Server erstellen ═════════════════════════
+
+SETUP = {"code": None}
+USER_RE = re.compile(r"^[A-Za-z0-9_.\-]{2,32}$")
+GAMEMODES = ("survival", "creative", "adventure")
+DIFFICULTIES = ("peaceful", "easy", "normal", "hard")
+
+
+def setup_needed():
+    return not get_users()
+
+
+def setup_code():
+    """Einmal-Code für die Einrichtung über das Netzwerk (steht im Terminal / Log von Blockhaus)."""
+    if SETUP["code"] is None:
+        SETUP["code"] = "%06d" % secrets.randbelow(10 ** 6)
+        print("\n  Blockhaus-Einrichtung: Code für den Zugriff über das Netzwerk: %s\n" % SETUP["code"], file=sys.stderr)
+    return SETUP["code"]
+
+
+def is_local_request(h):
+    return h.ip() in ("127.0.0.1", "::1", "::ffff:127.0.0.1")
+
+
+def has_server():
+    return os.path.isfile(srv("server.properties"))
+
+
+def free_port(port, kind=socket.SOCK_STREAM):
+    s = socket.socket(socket.AF_INET, kind)
+    try:
+        s.bind(("0.0.0.0", port))
+        return True
+    except OSError:
+        return False
+    finally:
+        s.close()
+
+
+def ram_recommend(total_mb):
+    """Empfehlung: dem System mindestens 2 GB bzw. ein Viertel lassen, höchstens 8 GB für Minecraft."""
+    rec = total_mb - max(2048, total_mb // 4)
+    return int(max(1024, min(8192, rec)) // 512 * 512)
+
+
+def storage_used(max_age=600):
+    total = 0
+    for p in {CONF["server_dir"], CONF["backup_dir"]}:
+        c = _size_cache.get(p)
+        if c and now() - c[0] < max_age:
+            total += c[1]
+        elif os.path.isdir(p):
+            _size_cache.pop(p, None)
+            total += dir_size(p)
+    return total
+
+
+def storage_limit():
+    gb = CONF.get("storage_max_gb")
+    return int(float(gb) * 1024 ** 3) if gb else None
+
+
+def storage_check(label):
+    """Vor einem Backup: Speicherlimit einhalten (alte automatische Backups löschen, sonst abbrechen)."""
+    lim = storage_limit()
+    if not lim:
+        return
+    _size_cache.pop(CONF["backup_dir"], None)
+    used = storage_used(0)
+    if used < lim:
+        return
+    autos = [b for b in list_backups() if b["kind"] == "auto"]
+    while used >= lim and len(autos) > 1:
+        b = autos.pop()
+        _unlink(os.path.join(CONF["backup_dir"], b["name"]))
+        used -= b["size"]
+        HUB.push_log("Speicherlimit: altes Backup %s gelöscht" % b["name"], "sys")
+    _size_cache.pop(CONF["backup_dir"], None)
+    if used >= lim:
+        raise RuntimeError("Speicherlimit von %s GB erreicht – kein Platz für ein neues Backup. Alte Backups "
+                           "löschen oder das Limit erhöhen." % CONF.get("storage_max_gb"))
+
+
+def system_info():
+    total, avail = osutil.Metrics().memory()
+    d = CONF["server_dir"]
+    while not os.path.exists(d) and os.path.dirname(d) != d:
+        d = os.path.dirname(d)
+    du = shutil.disk_usage(d)
+    tmb = (total or 4 * 1024 ** 3) // 1048576
+    return {"os": {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "Linux"), "ramTotalMb": tmb,
+            "ramAvailMb": (avail or 0) // 1048576, "cpus": os.cpu_count(), "diskFree": du.free, "diskTotal": du.total,
+            "ramRecommendMb": ram_recommend(tmb), "lanIp": osutil.lan_ip()}
+
+
+@api("GET", "/api/setup/status")
+def r_setup_status(h, s, q):  # öffentlich (siehe Handler.route)
+    needed = setup_needed()
+    local = is_local_request(h)
+    if needed and not local:
+        setup_code()
+    h.json({"needed": needed, "needsCode": needed and not local, "version": VERSION,
+            "os": {"win32": "Windows", "darwin": "macOS"}.get(sys.platform, "Linux")})
+
+
+@api("POST", "/api/setup/admin")
+def r_setup_admin(h, s, q):  # öffentlich, aber nur solange es noch keinen Admin gibt
+    if not setup_needed():
+        raise ApiError("Blockhaus ist bereits eingerichtet", 403)
+    d = h.body_json()
+    if not is_local_request(h) and not hmac.compare_digest(str(d.get("code", "")).strip(), setup_code()):
+        time.sleep(1)
+        raise ApiError("Der Einrichtungs-Code stimmt nicht (er steht im Terminal bzw. Log von Blockhaus)", 403)
+    user, pw = str(d.get("user", "")).strip(), str(d.get("password", ""))
+    if not USER_RE.fullmatch(user):
+        raise ApiError("Benutzername: 2–32 Zeichen, nur Buchstaben, Ziffern, . _ -")
+    if len(pw) < 8:
+        raise ApiError("Das Passwort muss mindestens 8 Zeichen haben")
+    with users_lock:
+        if get_users():
+            raise ApiError("Blockhaus ist bereits eingerichtet", 403)
+    set_user_pw(user, pw)
+    if d.get("language") in ("de", "en"):
+        CONF["language"] = d["language"]
+    save_json(CONF_PATH, CONF)
+    audit(user, h.ip(), "einrichtung-admin")
+    h.start_session(user)
+
+
+@api("GET", "/api/server/create/info")
+def r_create_info(h, s, q):
+    info = system_info()
+    port = next((p for p in range(25565, 25600) if free_port(p)), 25565)
+    h.json({"system": info, "hasServer": has_server(), "serverDir": CONF["server_dir"],
+            "defaultDir": DEFAULT_CONF["server_dir"], "port": port, "running": svc_info().get("ActiveState") == "active",
+            "loaders": [{"id": k, "name": L["name"], "kind": L["kind"], "desc": L["desc"], "verLabel": L["verLabel"]}
+                        for k, L in LOADERS.items()],
+            "settings": panel_settings()})
+
+
+def _opt_int(d, k, lo, hi, default):
+    try:
+        v = int(d.get(k, default))
+    except (TypeError, ValueError):
+        raise ApiError("Ungültiger Wert: %s" % k)
+    if not lo <= v <= hi:
+        raise ApiError("%s muss zwischen %d und %d liegen" % (k, lo, hi))
+    return v
+
+
+@api("POST", "/api/server/create")
+def r_create(h, s, q):
+    d = h.body_json()
+    mode = d.get("mode")
+    if update_lock.locked() or backup_lock.locked():
+        raise ApiError("Es läuft bereits eine Aufgabe")
+    if svc_info().get("ActiveState") in ("active", "activating"):
+        raise ApiError("Bitte zuerst den laufenden Server stoppen")
+    path = os.path.abspath(os.path.expanduser(str(d.get("serverDir") or DEFAULT_CONF["server_dir"])))
+    if mode == "import":
+        if not os.path.isfile(os.path.join(path, "server.properties")):
+            raise ApiError("In diesem Ordner liegt kein Minecraft-Server (server.properties fehlt)")
+        apply_settings(d.get("settings") or {})
+        CONF["server_dir"] = path
+        save_json(CONF_PATH, CONF)
+        ensure_rcon()
+        ensure_launch_conf()
+        if d.get("eula") and not eula_accepted():
+            write_eula()
+        act(h, s, "server-uebernommen", path)
+        return h.json({"ok": True, "server": server_version()})
+    if mode != "new":
+        raise ApiError("Unbekannte Art")
+    if not d.get("eula"):
+        raise ApiError("Ohne Zustimmung zur Minecraft-EULA kann kein Server erstellt werden")
+    if os.path.isdir(path) and os.listdir(path):
+        raise ApiError("Der Ordner %s ist nicht leer – bitte einen leeren oder neuen Ordner wählen" % path)
+    ld = str(d.get("loader") or "")
+    if ld not in LOADERS:
+        raise ApiError("Bitte eine Server-Software wählen")
+    mc, lv = str(d.get("mc") or ""), str(d.get("loaderVersion") or "")
+    if not VER_RE.fullmatch(mc) or (lv and not VER_RE.fullmatch(lv)):
+        raise ApiError("Ungültige Version")
+    motd = re.sub(r"[\r\n]", " ", str(d.get("motd") or "Ein Blockhaus-Server"))[:59]
+    seed = re.sub(r"[\r\n]", "", str(d.get("seed") or ""))[:64]
+    props = {
+        "motd": motd, "level-seed": seed, "level-name": "world",
+        "gamemode": d.get("gamemode") if d.get("gamemode") in GAMEMODES else "survival",
+        "difficulty": d.get("difficulty") if d.get("difficulty") in DIFFICULTIES else "normal",
+        "max-players": _opt_int(d, "maxPlayers", 1, 1000, 10),
+        "server-port": _opt_int(d, "port", 1024, 65535, 25565),
+        "online-mode": "false" if d.get("onlineMode") is False else "true",
+        "pvp": "false" if d.get("pvp") is False else "true",
+        "white-list": "true" if d.get("whitelist") else "false",
+    }
+    if not free_port(props["server-port"]):
+        raise ApiError("Port %d ist schon belegt – bitte einen anderen wählen" % props["server-port"])
+    resolve_install(ld if ld != "vanilla" else "vanilla", mc, lv)  # früh prüfen, ob es die Kombination gibt
+    apply_settings(d.get("settings") or {})
+    act(h, s, "server-erstellen", "%s %s %s" % (LOADERS[ld]["name"], mc, lv))
+    threading.Thread(target=lambda: _bg(create_server, path, ld, mc, lv, props, bool(d.get("start", True)),
+                                        s["user"]), daemon=True).start()
+    h.json({"ok": True})
+
+
+def write_eula():
+    with open(srv("eula.txt"), "w", encoding="utf-8") as f:
+        f.write("# Minecraft-EULA (https://aka.ms/MinecraftEULA) – zugestimmt über Blockhaus am %s\neula=true\n"
+                % time.strftime("%Y-%m-%d %H:%M"))
+
+
+def create_server(path, ld, mc, lv, props, start, user):
+    if not update_lock.acquire(blocking=False):
+        raise RuntimeError("Es läuft bereits eine Aufgabe")
+
+    def step(msg):
+        HUB.set_task({"kind": "setup", "msg": msg[0].upper() + msg[1:], "t": now()})
+        HUB.push_log("Einrichtung: " + msg, "sys")
+
+    try:
+        L = LOADERS[ld]
+        step("bereite den Server-Ordner vor …")
+        os.makedirs(path, exist_ok=True)
+        CONF["server_dir"] = path
+        save_json(CONF_PATH, CONF)
+        spec = resolve_install(ld, mc, lv)
+        jpath = java_for(mc, install=True, step=step)
+        launch = install_loader(ld, mc, lv, spec, jpath, step)
+        write_eula()
+        rport = next((p for p in range(25575, 25700) if free_port(p)), 25575)
+        with open(srv("server.properties"), "w", encoding="utf-8") as f:
+            f.write("#Minecraft server properties – erstellt von Blockhaus\n")
+        write_props(dict(props, **{"enable-rcon": "true", "rcon.port": rport,
+                                   "rcon.password": secrets.token_urlsafe(24), "broadcast-rcon-to-ops": "false"}))
+        if L["dir"]:
+            os.makedirs(srv(L["dir"]), exist_ok=True)
+        write_launch_conf(ld, mc, lv, launch)
+        CONF["mc_version"], CONF["loader_version"] = mc, lv
+        save_json(CONF_PATH, CONF)
+        HUB.push_log("Einrichtung: %s %s ist installiert" % (L["name"], mc), "sys")
+        audit(user, "-", "server-erstellt", "%s %s" % (L["name"], mc))
+        if start:
+            step("starte den Server – beim ersten Start wird die Welt erzeugt …")
+            svc_action("start")
+    except Exception as e:
+        HUB.push_log("Einrichtung fehlgeschlagen: %s" % e, "err")
+        audit(user, "-", "server-erstellen-fehlgeschlagen", str(e)[:300])
+        raise
+    finally:
+        HUB.set_task(None)
+        update_lock.release()
+
+
+# ── Einstellungen für Start & Ressourcen ──
+
+SETTING_KEYS = ("ram_max_mb", "storage_max_gb", "autostart", "auto_restart", "java", "listen_host",
+                "public_address", "language", "auto_backup_hours", "auto_backup_keep")
+
+
+def panel_settings():
+    info = {k: CONF.get(k) for k in SETTING_KEYS}
+    info["control"] = CONF.get("control")
+    info["ramEffectiveMb"] = ram_limits()[1]
+    return info
+
+
+def apply_settings(d):
+    total = (osutil.Metrics().memory()[0] or 4 * 1024 ** 3) // 1048576
+    if "ram_max_mb" in d:
+        v = d["ram_max_mb"]
+        if v in (None, "", 0):
+            CONF["ram_max_mb"] = None
+        else:
+            v = int(v)
+            if not 512 <= v <= total:
+                raise ApiError("Arbeitsspeicher: zwischen 512 MB und %d MB" % total)
+            CONF["ram_max_mb"] = v
+            CONF["ram_min_mb"] = None
+    if "storage_max_gb" in d:
+        v = d["storage_max_gb"]
+        if v in (None, "", 0):
+            CONF["storage_max_gb"] = None
+        else:
+            v = float(v)
+            if v < 1:
+                raise ApiError("Speicherlimit: mindestens 1 GB")
+            CONF["storage_max_gb"] = round(v, 1)
+    for k in ("autostart", "auto_restart"):
+        if k in d:
+            CONF[k] = bool(d[k])
+    if "java" in d:
+        v = str(d["java"] or "auto").strip()
+        if v != "auto" and not os.path.isfile(v):
+            raise ApiError("Java nicht gefunden: %s" % v)
+        CONF["java"] = v
+    if "listen_host" in d:
+        if d["listen_host"] not in ("127.0.0.1", "0.0.0.0"):
+            raise ApiError("Ungültige Netzwerk-Einstellung")
+        CONF["listen_host"] = d["listen_host"]
+    if "public_address" in d:
+        v = str(d["public_address"] or "").strip()
+        if v and not re.fullmatch(r"[A-Za-z0-9.\-:\[\]]{1,253}", v):
+            raise ApiError("Ungültige Adresse")
+        CONF["public_address"] = v
+    if "language" in d and d["language"] in ("de", "en"):
+        CONF["language"] = d["language"]
+    if "auto_backup_hours" in d:
+        v = float(d["auto_backup_hours"] or 0)
+        if not 0 <= v <= 168:
+            raise ApiError("Backup-Intervall: 0 bis 168 Stunden")
+        CONF["auto_backup_hours"] = v
+    if "auto_backup_keep" in d:
+        CONF["auto_backup_keep"] = max(1, min(100, int(d["auto_backup_keep"] or 7)))
+    save_json(CONF_PATH, CONF)
+
+
+@api("GET", "/api/panel/settings")
+def r_panel_settings(h, s, q):
+    h.json({"settings": panel_settings(), "system": system_info(),
+            "storage": {"used": storage_used(), "max": storage_limit()}, "java": {
+                "managed": sorted(managed_javas()), "system": java_info()[0] if not java_auto() else shutil.which("java")}})
+
+
+@api("POST", "/api/panel/settings")
+def r_panel_settings_set(h, s, q):
+    d = h.body_json()
+    old_host = CONF.get("listen_host")
+    apply_settings({k: v for k, v in d.items() if k in SETTING_KEYS})
+    act(h, s, "einstellungen", ", ".join(sorted(k for k in d if k in SETTING_KEYS)))
+    h.json({"ok": True, "settings": panel_settings(), "restartPanel": CONF.get("listen_host") != old_host})
+
+
 api("GET", "/api/metrics")(r_metrics)
 
 
@@ -5270,7 +5623,8 @@ def main():
     if cli():
         return
     if not get_users():
-        sys.exit("Noch kein Admin angelegt:  python3 -m blockhaus adduser NAME")
+        print("Blockhaus ist noch nicht eingerichtet – bitte im Browser öffnen und den Assistenten durchlaufen.",
+              file=sys.stderr)
     if not os.path.exists(CONF_PATH):
         save_json(CONF_PATH, CONF)
     has_server = os.path.isfile(srv("server.properties"))

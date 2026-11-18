@@ -245,8 +245,11 @@ function applyTheme(t = store.get('theme', 'auto')) {
 applyTheme();
 
 // ───────────────────────── Login / Start ─────────────────────────
-function showLogin() {
+async function showLogin() {
   if (S.es) { S.es.close(); S.es = null; }
+  S.me = null;
+  try { const st = await api('/api/setup/status'); if (st.needed) { showSetup(st); return; } } catch { /* weiter zum Login */ }
+  $('#setup').hidden = true;
   $('#app').hidden = true; $('#login').hidden = false;
   $('#palette').hidden = true; $('#modal').hidden = true;
   setTimeout(() => $('#login-form [name=user]').focus(), 50);
@@ -479,7 +482,8 @@ const PAGES = [
   { id: 'admins', label: 'Panel & Admins', icon: 'shield', sec: 'Panel' },
 ];
 
-const SUBPAGES = { player: { label: 'Spieler', nav: 'players' } };
+const SUBPAGES = { player: { label: 'Spieler', nav: 'players' }, create: { label: 'Server erstellen', nav: 'overview' } };
+const NO_SERVER_OK = new Set(['create', 'admins', 'settings']);  // ohne Server erreichbare Seiten
 
 function buildNav() {
   let sec = '', html = '';
@@ -499,7 +503,8 @@ document.addEventListener('click', (e) => {
 window.addEventListener('hashchange', route);
 function route() {
   if (!S.me) return;
-  const [, id = 'overview', param] = location.hash.match(/^#\/(\w+)(?:\/([\w-]+))?/) || [];
+  let [, id = 'overview', param] = location.hash.match(/^#\/(\w+)(?:\/([\w-]+))?/) || [];
+  if (!S.me.hasServer && !NO_SERVER_OK.has(id)) { id = 'create'; if (location.hash !== '#/create') history.replaceState(null, '', '#/create'); }
   const subp = SUBPAGES[id];
   const page = subp ? { id, label: subp.label, nav: subp.nav } : (PAGES.find((p) => p.id === id) || PAGES[0]);
   if (S.cleanup) { try { S.cleanup(); } catch { /* egal */ } S.cleanup = null; }
@@ -1357,7 +1362,7 @@ VIEWS.settings = (v) => {
   let orig = {}, cur = {}, locked = [], q = '';
   v.innerHTML = `${head('Einstellungen', 'server.properties – die meisten Änderungen werden erst nach einem Neustart aktiv.',
     `<div class="search-in"><span class="ico" data-i="search"></span><input class="input" id="s-q" placeholder="Einstellung suchen …" style="width:220px"></div>`)}
-    <div id="s-list"></div>
+    <div id="s-res"></div><div id="s-list"></div>
     <div class="settings-layout"><nav class="toc" id="s-toc"></nav><div id="s-body"><div class="card"><div class="skeleton"></div></div></div></div>`;
   const known = new Set(PROPS.flatMap(([, , items]) => items.map((i) => i[0])));
   function control(key, def) {
@@ -1421,7 +1426,8 @@ VIEWS.settings = (v) => {
     if (b.dataset.s === 'restart') power('restart');
   });
   $('#s-q', v).oninput = (e) => { q = e.target.value.trim().toLowerCase(); render(); };
-  serverListCard($('#s-list', v));
+  resourcesCard($('#s-res', v));
+  if (S.me.hasServer) serverListCard($('#s-list', v));
   api('/api/properties').then((r) => { orig = r.props; cur = { ...orig }; locked = r.locked; render(); hydrateIcons(v); })
     .catch((e) => { $('#s-body', v).innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; });
 };
@@ -3294,4 +3300,301 @@ document.addEventListener('keydown', (e) => {
 });
 
 // ───────────────────────── Los geht's ─────────────────────────
+// ═════════════════════════ Einrichtung & Server erstellen ═════════════════════════
+const LOGO = '<svg class="cube" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 12 86 32 50 52 14 32z" fill="#7fe0a8"/><path d="M14 32 50 52v40L14 72z" fill="#3bb273"/><path d="M86 32 50 52v40l36-20z" fill="#1f7a4d"/><path d="M26 78.7 38 85.3V63.3L26 56.7z" fill="#ffd27a"/><path d="M60 64.4 74 56.7V44.7L60 52.4z" fill="#ffd27a"/></svg>';
+
+// Erster Start: Willkommen + Admin-Konto (öffentlich, nur solange es keinen Admin gibt)
+function showSetup(st) {
+  if (S.es) { S.es.close(); S.es = null; }
+  $('#app').hidden = true; $('#login').hidden = true;
+  const box = $('#setup');
+  box.hidden = false;
+  box.innerHTML = `<form class="login-card setup-card" id="setup-form" autocomplete="off">
+    <div class="brand brand-lg">${LOGO}<div><b>Blockhaus</b><small>Version ${esc(st.version)} · ${esc(st.os)}</small></div></div>
+    <h2 class="setup-h">Willkommen!</h2>
+    <p class="setup-p">In wenigen Schritten läuft dein eigener Minecraft-Server. Lege zuerst dein Admin-Konto an – damit meldest du dich später bei Blockhaus an.</p>
+    <label class="field"><span>Sprache</span><select class="input" name="language"><option value="de">Deutsch</option><option value="en">English (in Arbeit)</option></select></label>
+    ${st.needsCode ? `<label class="field"><span>Einrichtungs-Code</span><input class="input mono" name="code" inputmode="numeric" maxlength="6" required placeholder="6 Ziffern" autocomplete="one-time-code">
+      <small class="field-hint">Du rufst Blockhaus über das Netzwerk auf. Den Code zeigt Blockhaus im Terminal bzw. im Log an.</small></label>` : ''}
+    <label class="field"><span>Benutzername</span><input class="input" name="user" required minlength="2" maxlength="32" autocomplete="username" spellcheck="false" autocapitalize="off"></label>
+    <label class="field"><span>Passwort (mind. 8 Zeichen)</span><input class="input" name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+    <label class="field"><span>Passwort wiederholen</span><input class="input" name="password2" type="password" required minlength="8" autocomplete="new-password"></label>
+    <p class="login-err" id="setup-err" role="alert"></p>
+    <button class="btn btn-primary btn-block" type="submit">Weiter</button>
+    <p class="login-foot">Blockhaus ist kein offizielles Minecraft-Produkt und nicht mit Mojang oder Microsoft verbunden.</p>
+  </form>`;
+  const f = $('#setup-form', box);
+  setTimeout(() => $('[name=code], [name=user]', f).focus(), 50);
+  f.onsubmit = async (e) => {
+    e.preventDefault();
+    const err = $('#setup-err', f), btn = $('button[type=submit]', f);
+    err.textContent = '';
+    if (f.password.value !== f.password2.value) { err.textContent = 'Die Passwörter stimmen nicht überein'; return; }
+    btn.disabled = true;
+    try {
+      await api('/api/setup/admin', { method: 'POST', body: { user: f.user.value.trim(), password: f.password.value, language: f.language.value, code: f.code ? f.code.value : '' } });
+      box.hidden = true; box.innerHTML = '';
+      location.hash = '#/create';
+      await boot();
+    } catch (x) { err.textContent = x.message; btn.disabled = false; }
+  };
+}
+
+// Server erstellen (oder vorhandenen übernehmen) – mehrstufiger Assistent
+VIEWS.create = (v) => {
+  const STEPS = ['Software', 'Version', 'Welt & Spiel', 'Ressourcen', 'Automatik', 'Fertigstellen'];
+  const d = {
+    mode: 'new', loader: 'paper', mc: '', loaderVersion: '', motd: 'Mein Blockhaus-Server', gamemode: 'survival', difficulty: 'normal', seed: '',
+    maxPlayers: 10, pvp: true, whitelist: false, onlineMode: true, port: 25565, serverDir: '', importDir: '', ram: 0, storageOn: false, storageGb: 20,
+    autostart: true, autoRestart: true, backupHours: 24, eula: false, start: true,
+  };
+  let step = 0, info = null, games = [], builds = { builds: [], recommended: null, label: null }, busy = false, done = false;
+  v.innerHTML = `${head('Server erstellen', 'Neuen Minecraft-Server einrichten oder einen vorhandenen übernehmen.')}
+    <div class="card wiz"><ol class="wiz-steps" id="w-steps" aria-label="Schritte"></ol><div id="w-body" class="wiz-body"><div class="skeleton"></div></div>
+    <div class="wiz-foot"><button class="btn" id="w-back" type="button">Zurück</button><span class="grow"></span><span class="muted" id="w-msg" role="status"></span><button class="btn btn-primary" id="w-next" type="button">Weiter</button></div></div>`;
+  const body = $('#w-body', v), msg = $('#w-msg', v);
+  const gb = (b) => num(b / 1024 ** 3, 1) + ' GB';
+  const mb2gb = (m) => num(m / 1024, m % 1024 ? 1 : 0) + ' GB';
+  const L = (id) => (info ? info.loaders.find((l) => l.id === id) : null) || {};
+
+  async function loadVersions() {
+    games = []; builds = { builds: [], recommended: null, label: null };
+    try { games = (await api(`/api/update/versions?loader=${encodeURIComponent(d.loader)}`)).games; } catch (e) { msg.textContent = e.message; }
+    if (!games.includes(d.mc)) d.mc = games[0] || '';
+    await loadBuilds();
+  }
+  async function loadBuilds() {
+    builds = { builds: [], recommended: null, label: L(d.loader).verLabel };
+    if (L(d.loader).verLabel && d.mc) {
+      try { builds = await api(`/api/update/builds?loader=${encodeURIComponent(d.loader)}&mc=${encodeURIComponent(d.mc)}`); } catch (e) { msg.textContent = e.message; }
+    }
+    d.loaderVersion = builds.builds.includes(d.loaderVersion) ? d.loaderVersion : (builds.recommended || builds.builds[0] || '');
+  }
+
+  function stepper() {
+    $('#w-steps', v).innerHTML = (d.mode === 'import' ? ['Software', 'Ordner', 'Ressourcen', 'Automatik', 'Fertigstellen'] : STEPS)
+      .map((s, i) => `<li class="${i === step ? 'on' : i < step ? 'done' : ''}" ${i === step ? 'aria-current="step"' : ''}><span>${i < step ? svg('check') : i + 1}</span>${esc(s)}</li>`).join('');
+  }
+  const order = () => (d.mode === 'import' ? ['software', 'import', 'resources', 'auto', 'finish'] : ['software', 'version', 'world', 'resources', 'auto', 'finish']);
+
+  function render() {
+    stepper();
+    msg.textContent = '';
+    const k = order()[step];
+    $('#w-back', v).hidden = step === 0 || done;
+    $('#w-next', v).hidden = done;
+    $('#w-next', v).innerHTML = k === 'finish' ? `${ico('rocket')}${d.mode === 'import' ? 'Übernehmen' : 'Server erstellen'}` : 'Weiter';
+    if (k === 'software') {
+      const KIND = { mod: ['Mods', 'chip-aqua'], plugin: ['Plugins', 'chip-gold'] };
+      body.innerHTML = `<h2 class="wiz-h">Welche Server-Software?</h2>
+        <p class="wiz-p">Das lässt sich später unter „Updates &amp; Software“ jederzeit ändern. Unsicher? <b>Paper</b> ist schnell, stabil und Spieler brauchen nichts zu installieren.</p>
+        <div class="sw-grid">${info.loaders.map((l) => `<button type="button" class="sw-tile ${d.mode === 'new' && l.id === d.loader ? 'on' : ''}" data-sw="${l.id}" aria-pressed="${d.mode === 'new' && l.id === d.loader}">
+          <span class="sw-h"><b>${esc(l.name)}</b>${l.id === 'paper' ? '<span class="chip chip-green">empfohlen</span>' : l.kind ? `<span class="chip ${KIND[l.kind][1]}">${KIND[l.kind][0]}</span>` : '<span class="chip">ohne Mods</span>'}</span>
+          <p>${esc(l.desc)}</p></button>`).join('')}
+          <button type="button" class="sw-tile ${d.mode === 'import' ? 'on' : ''}" data-sw="import" aria-pressed="${d.mode === 'import'}"><span class="sw-h"><b>Vorhandenen Server übernehmen</b></span><p>Du hast schon einen Server-Ordner (z. B. von einem anderen Tool)? Blockhaus übernimmt ihn samt Welt.</p></button></div>`;
+    } else if (k === 'version') {
+      const lv = L(d.loader).verLabel;
+      body.innerHTML = `<h2 class="wiz-h">Welche Version?</h2>
+        <p class="wiz-p">Spieler brauchen dieselbe Minecraft-Version. Meist ist die neueste die richtige.</p>
+        <div class="row"><label class="field grow"><span>Minecraft</span><select class="input" id="w-mc">${games.map((g) => `<option ${g === d.mc ? 'selected' : ''}>${esc(g)}</option>`).join('')}</select></label>
+        ${lv ? `<label class="field grow"><span>${esc(lv)}</span><select class="input" id="w-lv">${builds.builds.map((b) => `<option value="${esc(b)}" ${b === d.loaderVersion ? 'selected' : ''}>${esc(b)}${b === builds.recommended ? ' (empfohlen)' : ''}</option>`).join('') || '<option value="">keine passende Version</option>'}</select></label>` : ''}</div>
+        <p class="muted" style="font-size:13px;margin:4px 0 0">Java für diese Version lädt Blockhaus automatisch herunter.</p>`;
+      $('#w-mc', body).onchange = async (e) => { d.mc = e.target.value; await loadBuilds(); render(); };
+      const s = $('#w-lv', body); if (s) s.onchange = (e) => { d.loaderVersion = e.target.value; };
+    } else if (k === 'world') {
+      body.innerHTML = `<h2 class="wiz-h">Welt &amp; Spiel</h2>
+        <div class="wiz-grid">
+          <label class="field span-2"><span>Name in der Serverliste (MOTD)</span><input class="input" id="w-motd" maxlength="59" value="${esc(d.motd)}"></label>
+          <label class="field"><span>Spielmodus</span><select class="input" id="w-gm">${[['survival', 'Überleben'], ['creative', 'Kreativ'], ['adventure', 'Abenteuer']].map(([a, b]) => `<option value="${a}" ${a === d.gamemode ? 'selected' : ''}>${b}</option>`).join('')}</select></label>
+          <label class="field"><span>Schwierigkeit</span><select class="input" id="w-df">${[['peaceful', 'Friedlich'], ['easy', 'Einfach'], ['normal', 'Normal'], ['hard', 'Schwer']].map(([a, b]) => `<option value="${a}" ${a === d.difficulty ? 'selected' : ''}>${b}</option>`).join('')}</select></label>
+          <label class="field"><span>Max. Spieler</span><input class="input mono" id="w-mp" type="number" min="1" max="1000" value="${d.maxPlayers}"></label>
+          <label class="field"><span>Seed (optional)</span><input class="input mono" id="w-seed" maxlength="64" value="${esc(d.seed)}" placeholder="zufällig"></label>
+        </div>
+        <div class="wiz-toggles">
+          <label class="row"><span class="switch"><input type="checkbox" id="w-pvp" ${d.pvp ? 'checked' : ''}><span></span></span>Spieler können sich gegenseitig angreifen (PvP)</label>
+          <label class="row"><span class="switch"><input type="checkbox" id="w-wl" ${d.whitelist ? 'checked' : ''}><span></span></span>Nur eingeladene Spieler (Whitelist) – du trägst sie später unter „Spieler“ ein</label>
+          <label class="row"><span class="switch"><input type="checkbox" id="w-om" ${d.onlineMode ? 'checked' : ''}><span></span></span>Nur echte Minecraft-Konten (Online-Modus, empfohlen)</label>
+        </div>`;
+      const sync = () => {
+        d.motd = $('#w-motd', body).value; d.gamemode = $('#w-gm', body).value; d.difficulty = $('#w-df', body).value;
+        d.maxPlayers = parseInt($('#w-mp', body).value, 10) || 10; d.seed = $('#w-seed', body).value;
+        d.pvp = $('#w-pvp', body).checked; d.whitelist = $('#w-wl', body).checked; d.onlineMode = $('#w-om', body).checked;
+      };
+      body.oninput = sync; body.onchange = sync;
+    } else if (k === 'import') {
+      body.innerHTML = `<h2 class="wiz-h">Vorhandenen Server übernehmen</h2>
+        <p class="wiz-p">Gib den Ordner an, in dem <span class="mono">server.properties</span> und die Welt liegen. Blockhaus erkennt die Software (Vanilla, Fabric, Forge, NeoForge, Paper, Purpur) selbst und richtet RCON ein. Bitte den Server vorher beenden.</p>
+        <label class="field"><span>Server-Ordner</span><input class="input mono" id="w-imp" value="${esc(d.importDir)}" placeholder="${info.system.os === 'Windows' ? 'C:\\Users\\Name\\minecraft-server' : '/home/name/minecraft-server'}" spellcheck="false"></label>`;
+      $('#w-imp', body).oninput = (e) => { d.importDir = e.target.value.trim(); };
+    } else if (k === 'resources') {
+      const sys = info.system, max = Math.max(1024, Math.floor(sys.ramTotalMb / 512) * 512);
+      if (!d.ram) d.ram = sys.ramRecommendMb;
+      const ramNote = () => (d.ram > sys.ramTotalMb - 1536 ? `<span class="warn-t">${ico('alert')}Für das System bleibt sehr wenig übrig – das kann den Rechner ausbremsen.</span>`
+        : d.ram < 2048 ? `<span class="warn-t">${ico('alert')}Unter 2 GB wird es mit mehreren Spielern oder Mods eng.</span>` : `<span class="muted">${ico('check')}Passt gut.</span>`);
+      body.innerHTML = `<h2 class="wiz-h">Ressourcen</h2>
+        <p class="wiz-p">Dein Rechner: ${esc(sys.os)}, ${sys.cpus} Kerne, ${mb2gb(sys.ramTotalMb)} RAM, ${gb(sys.diskFree)} frei.</p>
+        <div class="field"><span>Arbeitsspeicher für Minecraft (maximal)</span>
+          <div class="ram-row"><input type="range" id="w-ram" min="1024" max="${max}" step="512" value="${d.ram}" aria-label="Arbeitsspeicher in MB"><b class="mono" id="w-ramv">${mb2gb(d.ram)}</b></div>
+          <div class="ram-scale"><span>1 GB</span><span>Empfohlen: ${mb2gb(sys.ramRecommendMb)}</span><span>${mb2gb(max)}</span></div>
+          <div id="w-ramn" class="ram-note">${ramNote()}</div></div>
+        <label class="row" style="margin-top:14px"><span class="switch"><input type="checkbox" id="w-st" ${d.storageOn ? 'checked' : ''}><span></span></span>Speicherplatz begrenzen (Welt + Backups)</label>
+        <div class="row" id="w-st-row" style="margin-top:8px" ${d.storageOn ? '' : 'hidden'}><input class="input mono" id="w-stv" type="number" min="1" max="100000" step="1" value="${d.storageGb}" style="width:120px"><span>GB</span><span class="muted" style="font-size:13px">Bei 90 % warnt Blockhaus, alte automatische Backups werden gelöscht; ist das Limit erreicht, entstehen keine neuen Backups.</span></div>
+        ${d.mode === 'new' ? `<div class="wiz-grid" style="margin-top:16px">
+          <label class="field span-2"><span>Speicherort des Servers</span><input class="input mono" id="w-dir" value="${esc(d.serverDir || info.defaultDir)}" spellcheck="false"></label>
+          <label class="field"><span>Port</span><input class="input mono" id="w-port" type="number" min="1024" max="65535" value="${d.port}"></label></div>` : ''}`;
+      $('#w-ram', body).oninput = (e) => { d.ram = +e.target.value; $('#w-ramv', body).textContent = mb2gb(d.ram); $('#w-ramn', body).innerHTML = ramNote(); };
+      $('#w-st', body).onchange = (e) => { d.storageOn = e.target.checked; $('#w-st-row', body).hidden = !d.storageOn; };
+      $('#w-stv', body).oninput = (e) => { d.storageGb = +e.target.value; };
+      const dir = $('#w-dir', body); if (dir) dir.oninput = (e) => { d.serverDir = e.target.value.trim(); };
+      const port = $('#w-port', body); if (port) port.oninput = (e) => { d.port = parseInt(e.target.value, 10) || 25565; };
+    } else if (k === 'auto') {
+      body.innerHTML = `<h2 class="wiz-h">Automatik</h2>
+        <div class="wiz-toggles">
+          <label class="row"><span class="switch"><input type="checkbox" id="w-as" ${d.autostart ? 'checked' : ''}><span></span></span><span>Minecraft-Server automatisch starten, wenn Blockhaus startet<br><small class="muted">Ob Blockhaus selbst beim Hochfahren des Rechners startet, stellst du bei der Installation ein.</small></span></label>
+          <label class="row"><span class="switch"><input type="checkbox" id="w-ar" ${d.autoRestart ? 'checked' : ''}><span></span></span>Nach einem Absturz automatisch neu starten</label>
+        </div>
+        <label class="field" style="max-width:320px;margin-top:16px"><span>Automatische Backups der Welt</span><select class="input" id="w-bk">${[[0, 'aus'], [6, 'alle 6 Stunden'], [12, 'alle 12 Stunden'], [24, 'täglich'], [168, 'wöchentlich']].map(([a, b]) => `<option value="${a}" ${a === d.backupHours ? 'selected' : ''}>${b}</option>`).join('')}</select></label>`;
+      $('#w-as', body).onchange = (e) => { d.autostart = e.target.checked; };
+      $('#w-ar', body).onchange = (e) => { d.autoRestart = e.target.checked; };
+      $('#w-bk', body).onchange = (e) => { d.backupHours = +e.target.value; };
+    } else if (k === 'finish') {
+      const l = L(d.loader);
+      const rows = d.mode === 'import' ? [['Ordner', d.importDir]] : [['Software', `${l.name} ${d.mc}${d.loaderVersion ? ' · ' + d.loaderVersion : ''}`], ['Name', d.motd],
+        ['Spiel', `${{ survival: 'Überleben', creative: 'Kreativ', adventure: 'Abenteuer' }[d.gamemode]}, ${{ peaceful: 'Friedlich', easy: 'Einfach', normal: 'Normal', hard: 'Schwer' }[d.difficulty]}, max. ${d.maxPlayers} Spieler`],
+        ['Ordner', d.serverDir || info.defaultDir], ['Port', d.port]];
+      rows.push(['Arbeitsspeicher', mb2gb(d.ram)], ['Speicherlimit', d.storageOn ? `${d.storageGb} GB` : 'keins'], ['Autostart', d.autostart ? 'an' : 'aus'], ['Backups', d.backupHours ? `alle ${d.backupHours} h` : 'aus']);
+      body.innerHTML = `<h2 class="wiz-h">Alles bereit</h2>
+        <dl class="kv wiz-sum">${rows.map(([a, b]) => `<dt>${esc(a)}</dt><dd>${esc(b)}</dd>`).join('')}</dl>
+        <label class="row eula"><input type="checkbox" id="w-eula" ${d.eula ? 'checked' : ''}><span>Ich stimme der <a href="https://aka.ms/MinecraftEULA" target="_blank" rel="noopener noreferrer">Minecraft-Endbenutzer-Lizenzvereinbarung (EULA)</a> zu. Ohne Zustimmung startet kein Minecraft-Server.</span></label>
+        ${d.mode === 'new' ? `<label class="row" style="margin-top:10px"><input type="checkbox" id="w-start" ${d.start ? 'checked' : ''}><span>Server direkt nach der Installation starten</span></label>` : ''}`;
+      $('#w-eula', body).onchange = (e) => { d.eula = e.target.checked; };
+      const s = $('#w-start', body); if (s) s.onchange = (e) => { d.start = e.target.checked; };
+    }
+    hydrateIcons(body);
+  }
+
+  body.addEventListener('click', async (e) => {
+    const t = e.target.closest('[data-sw]');
+    if (!t) return;
+    if (t.dataset.sw === 'import') { d.mode = 'import'; }
+    else { d.mode = 'new'; if (d.loader !== t.dataset.sw) { d.loader = t.dataset.sw; d.mc = ''; d.loaderVersion = ''; } }
+    render();
+  });
+
+  async function next() {
+    const k = order()[step];
+    msg.textContent = '';
+    if (k === 'software' && d.mode === 'new') { busy = true; msg.textContent = 'Lade Versionen …'; await loadVersions(); busy = false; if (!games.length) { msg.textContent = 'Keine Versionen gefunden – Internetverbindung prüfen'; return; } }
+    if (k === 'version' && L(d.loader).verLabel && !d.loaderVersion) { msg.textContent = `Für Minecraft ${d.mc} gibt es keine ${L(d.loader).name}-Version`; return; }
+    if (k === 'world' && !d.motd.trim()) { msg.textContent = 'Bitte einen Namen angeben'; return; }
+    if (k === 'import' && !d.importDir) { msg.textContent = 'Bitte den Ordner angeben'; return; }
+    if (k === 'resources' && d.storageOn && !(d.storageGb >= 1)) { msg.textContent = 'Speicherlimit: mindestens 1 GB'; return; }
+    if (k === 'finish') return submit();
+    step++; render();
+  }
+  async function submit() {
+    if (!d.eula) { msg.textContent = 'Bitte der EULA zustimmen'; return; }
+    const settings = { ram_max_mb: d.ram, storage_max_gb: d.storageOn ? d.storageGb : null, autostart: d.autostart, auto_restart: d.autoRestart, auto_backup_hours: d.backupHours };
+    const payload = d.mode === 'import' ? { mode: 'import', serverDir: d.importDir, eula: true, settings }
+      : { mode: 'new', loader: d.loader, mc: d.mc, loaderVersion: d.loaderVersion, motd: d.motd, gamemode: d.gamemode, difficulty: d.difficulty, seed: d.seed, maxPlayers: d.maxPlayers,
+        pvp: d.pvp, whitelist: d.whitelist, onlineMode: d.onlineMode, port: d.port, serverDir: d.serverDir || info.defaultDir, eula: true, start: d.start, settings };
+    $('#w-next', v).disabled = true;
+    try { await post('/api/server/create', payload); } catch (e) { msg.textContent = e.message; $('#w-next', v).disabled = false; return; }
+    if (d.mode === 'import') { await refreshVersion(); S.me.hasServer = true; toast('Server übernommen'); location.hash = '#/overview'; return; }
+    done = true; progress();
+  }
+  function progress() {
+    $('#w-steps', v).innerHTML = '';
+    $('#w-back', v).hidden = true; $('#w-next', v).hidden = true;
+    body.innerHTML = `<div class="wiz-progress"><span class="spinner lg"></span><h2 class="wiz-h" id="w-ptitle">Server wird eingerichtet …</h2><p class="wiz-p" id="w-pmsg">${esc((S.task && S.task.msg) || 'Startet …')}</p>
+      <div class="console" id="w-log" style="max-height:200px;min-height:60px;border-radius:9px;text-align:left"></div></div>`;
+  }
+  const paint = (lines) => {
+    const box = $('#w-log', v); if (!box) return;
+    lines.filter(([k, l]) => (k === 'sys' || k === 'err') && /^(Einrichtung|Java|Einrichtung fehlgeschlagen)/.test(l)).forEach(([k, l]) => {
+      const el = document.createElement('div'); el.className = 'l ' + k; el.textContent = l.replace(/^Einrichtung: /, ''); box.append(el);
+      if (/fehlgeschlagen/.test(l)) failed(l);
+    });
+    box.scrollTop = box.scrollHeight;
+  };
+  async function finished() {
+    await refreshVersion();
+    if (!S.me.hasServer) return;
+    const addr = `${S.me.address || 'localhost'}${d.port !== 25565 ? ':' + d.port : ''}`;
+    body.innerHTML = `<div class="wiz-progress"><div class="wiz-ok">${ico('check')}</div><h2 class="wiz-h">Dein Server ist bereit!</h2>
+      <p class="wiz-p">${d.start ? 'Er startet gerade und erzeugt die Welt – das dauert beim ersten Mal ein bis zwei Minuten.' : 'Du kannst ihn jetzt oben rechts starten.'}</p>
+      <p class="wiz-p">Im Heimnetz verbinden über <b class="mono">${esc(addr)}</b>. Damit Freunde von außerhalb joinen können, muss im Router der Port ${d.port} (TCP) freigegeben sein.</p>
+      <a class="btn btn-primary" href="#/overview">${ico('home')}Zur Übersicht</a></div>`;
+    hydrateIcons(body);
+  }
+  function failed(line) {
+    const t = $('#w-ptitle', v); if (t) t.textContent = 'Das hat nicht geklappt';
+    const p = $('#w-pmsg', v); if (p) p.textContent = line.replace(/^Einrichtung fehlgeschlagen: /, '');
+    const sp = $('.spinner', body); if (sp) sp.remove();
+    if (!$('#w-retry', body)) body.insertAdjacentHTML('beforeend', '<button class="btn" id="w-retry" type="button">Zurück zum Assistenten</button>');
+    $('#w-retry', body).onclick = () => { done = false; step = order().length - 1; $('#w-next', v).disabled = false; render(); };
+  }
+
+  $('#w-next', v).onclick = () => { if (!busy) next(); };
+  $('#w-back', v).onclick = () => { if (step > 0) { step--; render(); } };
+  (async () => {
+    try { info = await api('/api/server/create/info'); } catch (e) { body.innerHTML = `<div class="empty">${esc(e.message)}</div>`; return; }
+    if (info.hasServer && !location.hash.includes('force')) {
+      body.innerHTML = `<div class="empty">${ico('check')}Es ist bereits ein Server eingerichtet (<span class="mono">${esc(info.serverDir)}</span>). Software und Version änderst du unter <a href="#/updates">Updates &amp; Software</a>.</div>`;
+      $('#w-next', v).hidden = true; $('#w-back', v).hidden = true; hydrateIcons(body); return;
+    }
+    d.port = info.port;
+    d.serverDir = info.defaultDir;
+    d.ram = info.system.ramRecommendMb;
+    render();
+  })();
+  return sub((ev, data) => {
+    if (!done) return;
+    if (ev === 'log') paint(data);
+    if (ev === 'task') { const p = $('#w-pmsg', v); if (p && S.task) p.textContent = S.task.msg; if (!S.task) finished(); }
+  });
+};
+
+// Einstellungen: Start & Ressourcen (oberhalb der server.properties)
+async function resourcesCard(el) {
+  let r;
+  try { r = await api('/api/panel/settings'); } catch (e) { el.innerHTML = ''; return; }
+  const st = r.settings, sys = r.system, max = Math.max(1024, Math.floor(sys.ramTotalMb / 512) * 512);
+  const gbs = (b) => num(b / 1024 ** 3, 1) + ' GB';
+  const mb2gb = (m) => num(m / 1024, m % 1024 ? 1 : 0) + ' GB';
+  let ram = st.ram_max_mb || st.ramEffectiveMb;
+  el.innerHTML = `<div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Start &amp; Ressourcen</h2><span class="sub">Blockhaus ${esc(S.me.appVersion || '')}</span></div>
+    <div class="grid g-2" style="gap:22px">
+      <div>
+        <div class="field"><span>Arbeitsspeicher für Minecraft (wirkt nach Neustart)</span>
+          <div class="ram-row"><input type="range" id="r-ram" min="1024" max="${max}" step="512" value="${ram}" ${st.control === 'systemd' ? 'disabled' : ''}><b class="mono" id="r-ramv">${mb2gb(ram)}</b></div>
+          <div class="ram-scale"><span>1 GB</span><span>Empfohlen: ${mb2gb(sys.ramRecommendMb)}</span><span>${mb2gb(max)}</span></div>
+          ${st.control === 'systemd' ? '<small class="muted">Wird über start.sh des systemd-Dienstes festgelegt.</small>' : ''}</div>
+        <label class="row" style="margin-top:12px"><span class="switch"><input type="checkbox" id="r-st" ${st.storage_max_gb ? 'checked' : ''}><span></span></span>Speicherplatz begrenzen</label>
+        <div class="row" id="r-st-row" style="margin-top:8px" ${st.storage_max_gb ? '' : 'hidden'}><input class="input mono" id="r-stv" type="number" min="1" step="1" value="${st.storage_max_gb || 20}" style="width:110px"><span>GB</span></div>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">Belegt (Welt + Backups): <b>${gbs(r.storage.used)}</b>${r.storage.max ? ` von ${gbs(r.storage.max)}` : ''} · frei auf dem Laufwerk: ${gbs(sys.diskFree)}</p>
+      </div>
+      <div class="wiz-toggles" style="margin:0">
+        <label class="row"><span class="switch"><input type="checkbox" id="r-as" ${st.autostart ? 'checked' : ''} ${st.control === 'systemd' ? 'disabled' : ''}><span></span></span>Server mit Blockhaus automatisch starten</label>
+        <label class="row"><span class="switch"><input type="checkbox" id="r-ar" ${st.auto_restart ? 'checked' : ''} ${st.control === 'systemd' ? 'disabled' : ''}><span></span></span>Nach Absturz automatisch neu starten</label>
+        <label class="row"><span class="switch"><input type="checkbox" id="r-lan" ${st.listen_host === '0.0.0.0' ? 'checked' : ''}><span></span></span><span>Blockhaus auch von anderen Geräten im Heimnetz erreichbar<br><small class="muted">z. B. vom Handy: http://${esc(sys.lanIp)}:…</small></span></label>
+        <label class="field" style="margin-top:6px"><span>Adresse für Spieler (optional, z. B. DynDNS-Name)</span><input class="input mono" id="r-addr" value="${esc(st.public_address || '')}" placeholder="${esc(sys.lanIp)}"></label>
+        <p class="muted" style="font-size:12.5px;margin:0">Java: ${st.java === 'auto' ? `automatisch${r.java.managed.length ? ` (geladen: ${r.java.managed.map((j) => 'Java ' + j).join(', ')})` : ''}` : esc(st.java)}</p>
+      </div>
+    </div>
+    <div class="row" style="margin-top:16px"><button class="btn btn-primary btn-sm" id="r-save">${ico('save')}Speichern</button><span class="muted" id="r-msg" style="font-size:13px"></span></div></div>`;
+  $('#r-ram', el).oninput = (e) => { ram = +e.target.value; $('#r-ramv', el).textContent = mb2gb(ram); };
+  $('#r-st', el).onchange = (e) => { $('#r-st-row', el).hidden = !e.target.checked; };
+  $('#r-save', el).onclick = async () => {
+    const body = { storage_max_gb: $('#r-st', el).checked ? +$('#r-stv', el).value : null, listen_host: $('#r-lan', el).checked ? '0.0.0.0' : '127.0.0.1', public_address: $('#r-addr', el).value.trim() };
+    if (st.control !== 'systemd') Object.assign(body, { ram_max_mb: ram, autostart: $('#r-as', el).checked, auto_restart: $('#r-ar', el).checked });
+    const res = await run(() => post('/api/panel/settings', body), 'Gespeichert');
+    if (res && res.restartPanel) {
+      $('#r-msg', el).innerHTML = 'Die Netzwerk-Einstellung wirkt nach einem Neustart von Blockhaus. <button class="link-btn" id="r-rs">Jetzt neu starten</button>';
+      $('#r-rs', el).onclick = () => run(() => post('/api/panel/restart', {}), 'Blockhaus startet neu …');
+    }
+  };
+  hydrateIcons(el);
+}
+
 boot();
