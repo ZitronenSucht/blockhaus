@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.1.2
+
+- Behoben: Unter Linux startete Blockhaus nach einem Update oder „Panel neu starten“ teils nicht wieder (wenn es nicht als eigener Dienst lief)
+
 ## 0.1.1
 
 - Behoben: Das Dashboard sprang bei laufendem Server ständig zwischen „Startet …“ und „Online“ (vor allem unter macOS)

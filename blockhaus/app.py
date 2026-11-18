@@ -43,7 +43,7 @@ except ImportError:  # direkt als Skript gestartet
     import osutil
     import system
 
-VERSION = "0.1.1"
+VERSION = "0.1.2"
 BASE = osutil.resource_dir(__file__)
 STATIC = os.path.join(BASE, "static")
 DATA = osutil.app_data_dir()
@@ -5734,7 +5734,9 @@ def r_panel_restart(h, s, q):
 
 def restart_self():
     """Blockhaus neu starten. Der Minecraft-Server läuft dabei weiter und wird danach wieder übernommen."""
-    if os.environ.get("INVOCATION_ID"):  # unter systemd: Dienst startet bei Exit-Code ≠ 0 neu
+    # Nur im eigenen systemd-Dienst (Autostart unter Linux) übernimmt systemd den Neustart. INVOCATION_ID allein
+    # reicht nicht: die erben auch Programme, die nur irgendwo unter systemd gestartet wurden.
+    if os.environ.get("BLOCKHAUS_SERVICE") == "systemd":
         os._exit(3)
     system.restart_detached("--background", gui=True)
     os._exit(0)

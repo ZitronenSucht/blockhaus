@@ -135,6 +135,7 @@ def set_autostart(on):
         os.makedirs(os.path.dirname(LINUX_UNIT), exist_ok=True)
         env = "".join('Environment="%s=%s"\n' % (k, os.environ[k])
                       for k in ("BLOCKHAUS_HOME", "BLOCKHAUS_DATA") if os.environ.get(k))
+        env += 'Environment="BLOCKHAUS_SERVICE=systemd"\n'  # damit Blockhaus weiß: systemd startet es neu
         with open(LINUX_UNIT, "w", encoding="utf-8") as f:
             f.write("[Unit]\nDescription=Blockhaus – Minecraft-Server-Tool\nAfter=network-online.target\n\n"
                     "[Service]\n%sExecStart=%s\nRestart=on-failure\nRestartSec=5\n"
