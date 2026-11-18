@@ -303,6 +303,7 @@ class Rcon:
         self.lock = threading.Lock()
         self.sock = None
         self.rid = 0
+        self.last_error = None  # letzter Verbindungsfehler (für Diagnose und Log)
 
     def close(self):
         if self.sock:
@@ -363,12 +364,20 @@ class Rcon:
                         if rid == cid:
                             parts.append(body)
                     return COLOR_RE.sub("", "".join(parts))
-                except RconError:
+                except RconError as e:
+                    self._note(e)
                     raise
-                except (OSError, struct.error):
+                except (OSError, struct.error) as e:
                     self.close()
                     if attempt:
+                        self._note(e)
                         raise RconError("Server nicht erreichbar")
+
+    def _note(self, e):
+        msg = "%s: %s" % (type(e).__name__, e)
+        if msg != self.last_error:
+            print("RCON:", msg, file=sys.stderr)
+        self.last_error = msg
 
 
 RCON = Rcon()
@@ -760,6 +769,7 @@ class Sampler:
         d = {"ready": False, "players": None, "online": [], "mspt": None, "tps": None, "maxPlayers": None}
         out = rcon_try("list")
         if out is None:
+            d["rconError"] = RCON.last_error
             return d
         d["ready"] = True
         m = re.search(r"There are (\d+) of a max of (\d+) players online:?(.*)", out, re.S)

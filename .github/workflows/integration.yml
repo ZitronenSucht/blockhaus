@@ -1,0 +1,30 @@
+name: Integration (echter Server)
+
+# Startet über Blockhaus einen echten Minecraft-Server und beobachtet den Live-Status.
+on:
+  workflow_dispatch:
+    inputs:
+      loader:
+        description: "Server-Software"
+        default: "paper"
+  push:
+    branches: [main]
+    paths: ["blockhaus/**", "tests/integration_server.py", ".github/workflows/integration.yml"]
+
+jobs:
+  server:
+    name: ${{ matrix.os }} · ${{ matrix.loader }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest]
+        loader: [paper, vanilla]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Server erstellen, starten, Status beobachten
+        run: python tests/integration_server.py ${{ github.event.inputs.loader || matrix.loader }} 120
