@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark light">
+<meta name="robots" content="noindex, nofollow">
+<title>Blockhaus</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="grid-bg" aria-hidden="true"></div>
+
+<!-- ───── Login ───── -->
+<main id="login" class="login" hidden>
+  <form class="login-card" id="login-form" autocomplete="on">
+    <div class="brand brand-lg">
+      <svg class="cube" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 12 86 32 50 52 14 32z" fill="#7fe0a8"/><path d="M14 32 50 52v40L14 72z" fill="#3bb273"/><path d="M86 32 50 52v40l36-20z" fill="#1f7a4d"/><path d="M26 78.7 38 85.3V63.3L26 56.7z" fill="#ffd27a"/><path d="M60 64.4 74 56.7V44.7L60 52.4z" fill="#ffd27a"/></svg>
+      <div><b>Blockhaus</b><small>Minecraft-Server</small></div>
+    </div>
+    <label class="field"><span>Admin</span>
+      <input name="user" autocomplete="username" required autofocus spellcheck="false" autocapitalize="off"></label>
+    <label class="field"><span>Passwort</span>
+      <input name="password" type="password" autocomplete="current-password" required></label>
+    <p class="login-err" id="login-err" role="alert"></p>
+    <button class="btn btn-primary btn-block" type="submit">Anmelden</button>
+    <p class="login-foot">Nur für Administratoren · Zugriff wird protokolliert</p>
+  </form>
+</main>
+
+<!-- ───── App ───── -->
+<div id="app" class="app" hidden>
+  <aside class="rail" id="rail">
+    <div class="brand">
+      <svg class="cube" viewBox="0 0 100 100" aria-hidden="true"><path d="M50 12 86 32 50 52 14 32z" fill="#7fe0a8"/><path d="M14 32 50 52v40L14 72z" fill="#3bb273"/><path d="M86 32 50 52v40l36-20z" fill="#1f7a4d"/><path d="M26 78.7 38 85.3V63.3L26 56.7z" fill="#ffd27a"/><path d="M60 64.4 74 56.7V44.7L60 52.4z" fill="#ffd27a"/></svg>
+      <div><b>Blockhaus</b><small id="brand-ver">–</small></div>
+    </div>
+    <nav id="nav" aria-label="Bereiche"></nav>
+    <div class="rail-foot">
+      <button class="kbd-hint" id="open-palette" type="button"><span class="ico" data-i="search"></span>Suchen<kbd>Strg K</kbd></button>
+      <div class="me">
+        <span class="avatar" id="me-avatar"></span>
+        <div><b id="me-name">–</b><small>Administrator</small></div>
+        <button class="icon-btn" id="logout" title="Abmelden" aria-label="Abmelden"><span class="ico" data-i="logout"></span></button>
+      </div>
+    </div>
+  </aside>
+
+  <div class="main">
+    <header class="topbar">
+      <button class="icon-btn only-mobile" id="menu-btn" aria-label="Menü"><span class="ico" data-i="menu"></span></button>
+      <div class="status-pill" id="status-pill"><span class="mcube"><span class="mc-b"><i class="fr"></i><i class="bk"></i><i class="l"></i><i class="r"></i><i class="t"></i><i class="bo"></i></span></span><b id="status-text">Verbinde …</b><span class="sep"></span><span id="status-sub">–</span></div>
+      <button class="maint-chip" id="maint-chip" hidden title="Wartungsmodus – klicken zum Beenden"></button>
+      <div class="task" id="task" hidden><span class="spinner"></span><span id="task-msg"></span><button class="link-btn" id="task-cancel" hidden>Abbrechen</button></div>
+      <div class="top-actions" id="power"></div>
+    </header>
+    <section class="view" id="view" tabindex="-1"></section>
+  </div>
+</div>
+
+<!-- Command-Palette -->
+<div class="palette-wrap" id="palette" hidden>
+  <div class="palette" role="dialog" aria-label="Befehlspalette">
+    <div class="palette-in"><span class="ico" data-i="search"></span><input id="palette-input" placeholder="Seite, Aktion oder /befehl …" autocomplete="off" spellcheck="false"><kbd>Esc</kbd></div>
+    <ul id="palette-list" role="listbox"></ul>
+  </div>
+</div>
+
+<!-- Dialog -->
+<div class="modal-wrap" id="modal" hidden><div class="modal" role="dialog" aria-modal="true" id="modal-box"></div></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+<div class="mctoasts" id="mctoasts" aria-live="polite"></div>
+
+<script src="/app.js"></script>
+</body>
+</html>
