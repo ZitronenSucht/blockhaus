@@ -1,6 +1,7 @@
 name: Release
 
 # Neues Release:  Version in blockhaus/app.py erhöhen, committen, dann  git tag vX.Y.Z && git push --tags
+# Vorab-Version (zum Testen, wird von Updates und install.sh ignoriert):  git tag vX.Y.Z-pre
 on:
   push:
     tags: ["v*"]
@@ -32,7 +33,7 @@ jobs:
         shell: bash
         run: |
           v=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' blockhaus/app.py)
-          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} passt nicht zu VERSION $v"; exit 1; }
+          [ "v$v" = "${GITHUB_REF_NAME%-pre}" ] || { echo "Tag ${GITHUB_REF_NAME} passt nicht zu VERSION $v"; exit 1; }
       - name: Bauen
         shell: bash
         run: |
@@ -41,7 +42,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $v = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          $v = "${env:GITHUB_REF_NAME}".TrimStart("v") -replace "-pre$", ""
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" packaging\windows\blockhaus.iss
       - uses: actions/upload-artifact@v4
         with:
@@ -71,5 +72,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          notes=$(python packaging/release_notes.py "${GITHUB_REF_NAME}")
-          gh release create "${GITHUB_REF_NAME}" release/* --title "Blockhaus ${GITHUB_REF_NAME#v}" --notes "$notes"
+          tag="${GITHUB_REF_NAME}"; ver="${tag#v}"; ver="${ver%-pre}"; pre=""
+          if [ "$tag" != "${tag%-pre}" ]; then pre="--prerelease"; fi
+          notes=$(python packaging/release_notes.py "v$ver")
+          [ -n "$pre" ] && notes="**Vorab-Version zum Testen / Pre-release for testing.** Linux/macOS: \`curl -fsSL https://github.com/ZitronenSucht/blockhaus/releases/download/$tag/install.sh | sh -s -- --version ${ver}-pre\`
+
+$notes"
+          gh release create "$tag" release/* $pre --title "Blockhaus $ver${pre:+ (Vorab-Version)}" --notes "$notes"
