@@ -97,6 +97,28 @@ c["listen_host"] = "0.0.0.0"
 json.dump(c, open(p, "w"), indent=2)' "$DATA_DIR"
 fi
 
+if [ "$MODE" = desktop ] && [ "$os" = macos ]; then
+  # Eigene App im Benutzer-Programme-Ordner – lokal erzeugt, daher ohne Gatekeeper-Sperre
+  APP="$HOME/Applications/Blockhaus.app"
+  rm -rf "$APP"; mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+  cp "$DEST/icons/blockhaus.icns" "$APP/Contents/Resources/blockhaus.icns"
+  printf '#!/bin/sh\nexec "%s/runtime/bin/python3" "%s/launch.py" --gui "$@"\n' "$DEST" "$DEST" > "$APP/Contents/MacOS/Blockhaus"
+  chmod +x "$APP/Contents/MacOS/Blockhaus"
+  ver="$(cat "$DEST/app/current")"
+  cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>CFBundleName</key><string>Blockhaus</string><key>CFBundleIdentifier</key><string>de.blockhaus.app</string>
+<key>CFBundleVersion</key><string>$ver</string><key>CFBundleShortVersionString</key><string>$ver</string>
+<key>CFBundleExecutable</key><string>Blockhaus</string><key>CFBundleIconFile</key><string>blockhaus.icns</string>
+<key>CFBundlePackageType</key><string>APPL</string><key>NSHighResolutionCapable</key><true/>
+</dict></plist>
+PLIST
+  codesign --force --sign - "$APP" >/dev/null 2>&1 || true
+  say "→ App angelegt: $APP (im Launchpad und im Finder unter „Programme“)"
+fi
+
 if [ "$MODE" = desktop ] && [ "$os" = linux ]; then
   APPS="$HOME/.local/share/applications"; mkdir -p "$APPS"
   cat > "$APPS/blockhaus.desktop" <<EOF
@@ -127,7 +149,8 @@ IP="$("$DEST/runtime/bin/python3" -c 'import socket; s=socket.socket(2,2); s.con
 say ""
 say "✔ Blockhaus ist installiert."
 if [ "$MODE" = desktop ]; then
-  say "  Starte es über das Startmenü/Launchpad oder mit:  blockhaus --gui"
+  if [ "$os" = macos ]; then say "  Starte es über das Launchpad (Blockhaus) oder mit:  open ~/Applications/Blockhaus.app"
+  else say "  Starte es über das Startmenü oder mit:  blockhaus --gui"; fi
 else
   say "  Öffne im Browser:  http://localhost:8080"
   [ "$LAN" = y ] && say "  Von anderen Geräten:  http://$IP:8080   (Einrichtungs-Code:  blockhaus setup-code)"

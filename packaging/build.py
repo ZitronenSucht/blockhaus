@@ -179,6 +179,9 @@ def build_macapp():
 <key>NSHighResolutionCapable</key><true/>
 </dict></plist>
 """ % (ver, ver))
+    # Ad-hoc-Signatur: ohne sie meldet macOS auf Apple-Chips „App ist beschädigt“. (Für eine Prüfung durch
+    # Apple bräuchte es ein Developer-ID-Zertifikat und Notarisierung.)
+    subprocess.check_call(["codesign", "--force", "--deep", "--sign", "-", app])
     stage = os.path.join(BUILD, "dmg")
     shutil.rmtree(stage, ignore_errors=True)
     os.makedirs(stage)

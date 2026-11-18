@@ -86,6 +86,13 @@ jobs:
           ~/.local/bin/blockhaus uninstall --yes --delete-worlds
           test ! -d "$RUNNER_TEMP/bh" && test ! -d "$BLOCKHAUS_DATA" && test ! -e ~/.local/bin/blockhaus
           echo "Installation und Deinstallation ok"
+          if [ "$RUNNER_OS" = macOS ]; then
+            sh packaging/install.sh --from "$pkg" --desktop --no-autostart --local --dir "$RUNNER_TEMP/bh2" --no-start
+            test -x ~/Applications/Blockhaus.app/Contents/MacOS/Blockhaus
+            codesign --verify ~/Applications/Blockhaus.app && echo "App signiert (ad hoc)"
+            ~/.local/bin/blockhaus uninstall --yes --delete-worlds
+            test ! -e ~/Applications/Blockhaus.app && echo "macOS-App entfernt"
+          fi
       - name: Starten und deinstallieren (Windows, portables Paket)
         if: runner.os == 'Windows'
         shell: pwsh

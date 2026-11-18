@@ -17,7 +17,8 @@ except OSError:
 print((log + "\n\n" if log else "") + """## Installieren / Install
 
 - **Windows:** `Blockhaus-Setup-windows-x86_64.exe`
-- **macOS:** `Blockhaus-macos-aarch64.dmg` (Apple Silicon) bzw. `Blockhaus-macos-x86_64.dmg` (Intel) – beim ersten Start Rechtsklick → Öffnen (die App ist noch nicht signiert)
+- **macOS (empfohlen, ohne Gatekeeper-Sperre):** im Terminal `curl -fsSL https://github.com/ZitronenSucht/blockhaus/releases/latest/download/install.sh | sh` – legt `~/Programme/Blockhaus.app` an
+- **macOS (.dmg):** `Blockhaus-macos-aarch64.dmg` (Apple-Chip) bzw. `Blockhaus-macos-x86_64.dmg` (Intel). Die App ist noch nicht von Apple geprüft: nach dem ersten Startversuch *Systemeinstellungen → Datenschutz & Sicherheit → „Dennoch öffnen“* – oder im Terminal `xattr -dr com.apple.quarantine /Applications/Blockhaus.app`
 - **Linux / Server:** `curl -fsSL https://github.com/ZitronenSucht/blockhaus/releases/latest/download/install.sh | sh`
 
 Bereits installiert? Blockhaus meldet das Update selbst unter *Einstellungen → Blockhaus* – ein Klick genügt.

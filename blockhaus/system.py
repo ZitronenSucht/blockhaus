@@ -335,6 +335,14 @@ def _remove_program(h):
         pass
     if osutil.IS_LINUX:
         _rm(os.path.expanduser("~/.local/share/applications/blockhaus.desktop"))
+    if osutil.IS_MAC:  # von install.sh angelegte App
+        app = os.path.expanduser("~/Applications/Blockhaus.app")
+        try:
+            with open(os.path.join(app, "Contents", "MacOS", "Blockhaus"), encoding="utf-8") as f:
+                if h in f.read():
+                    shutil.rmtree(app, ignore_errors=True)
+        except OSError:
+            pass
     # macOS: h liegt in Blockhaus.app/Contents/Resources – das ganze App-Paket entfernen
     root = h
     if osutil.IS_MAC and h.endswith(os.path.join("Contents", "Resources")):
