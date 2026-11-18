@@ -20,6 +20,7 @@ import re
 import secrets
 import shutil
 import socket
+import socketserver
 import sqlite3
 import struct
 import subprocess
@@ -5657,16 +5658,16 @@ def main():
         ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
         ctx.minimum_version = ssl.TLSVersion.TLSv1_2
         ctx.load_cert_chain(cert, key)
-        httpsd = ThreadingHTTPServer((CONF["listen_host"], https_port), Handler)
+        httpsd = FastHTTPServer((CONF["listen_host"], https_port), Handler)
         httpsd.socket = ctx.wrap_socket(httpsd.socket, server_side=True)
         httpsd.tls = True
         threading.Thread(target=httpsd.serve_forever, daemon=True).start()
         print("Blockhaus (HTTPS) läuft auf https://%s:%s" % (CONF["listen_host"], https_port), file=sys.stderr)
-        redirect = ThreadingHTTPServer((CONF["listen_host"], port), make_redirect(https_port))
+        redirect = FastHTTPServer((CONF["listen_host"], port), make_redirect(https_port))
         redirect.tls = False
         print("http://…:%s leitet auf HTTPS um" % port, file=sys.stderr)
         redirect.serve_forever()
-    httpd = ThreadingHTTPServer((CONF["listen_host"], port), Handler)
+    httpd = FastHTTPServer((CONF["listen_host"], port), Handler)
     httpd.tls = False
     print("Blockhaus läuft auf http://%s:%s" % (CONF["listen_host"], port), file=sys.stderr)
     httpd.serve_forever()
@@ -5720,6 +5721,16 @@ def ensure_tls():
         os.chmod(key, 0o600)
         _unlink(csr)
         print("TLS-Zertifikat neu ausgestellt", file=sys.stderr)
+
+
+class FastHTTPServer(ThreadingHTTPServer):
+    """Wie ThreadingHTTPServer, aber ohne getfqdn() beim Start – das hängt auf manchen Macs bis zu 30 s."""
+    daemon_threads = True
+
+    def server_bind(self):
+        socketserver.TCPServer.server_bind(self)
+        host, port = self.server_address[:2]
+        self.server_name, self.server_port = str(host), port
 
 
 def make_redirect(https_port):
