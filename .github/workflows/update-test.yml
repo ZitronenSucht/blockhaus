@@ -1,0 +1,46 @@
+name: Update-Test
+
+# Installiert die Vorab-Version 0.1.0 und aktualisiert sie über die App auf das neueste Release.
+on:
+  workflow_dispatch:
+    inputs:
+      from: { description: "Ausgangs-Release (Tag)", default: "v0.1.0-pre" }
+      want: { description: "Erwartete Version nach dem Update", default: "0.1.1" }
+
+jobs:
+  update:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Alte Version installieren und starten (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          tag="${{ github.event.inputs.from }}"
+          curl -fsSL -o i.sh "https://github.com/${{ github.repository }}/releases/download/$tag/install.sh"
+          sh i.sh --version "${tag#v}" --server --no-autostart --local --dir "$RUNNER_TEMP/bh" --no-start
+          export BLOCKHAUS_DATA="$RUNNER_TEMP/bh-data" BLOCKHAUS_PORT=8199
+          nohup ~/.local/bin/blockhaus --background >/dev/null 2>&1 &
+          python tests/update_flow.py 8199 "${{ github.event.inputs.want }}"
+          cat "$RUNNER_TEMP/bh/app/current"; echo; ls "$RUNNER_TEMP/bh/app"
+          tail -20 "$BLOCKHAUS_DATA/blockhaus.log"
+      - name: Alte Version installieren und starten (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tag = "${{ github.event.inputs.from }}"
+          Invoke-WebRequest "https://github.com/${{ github.repository }}/releases/download/$tag/blockhaus-windows-x86_64.zip" -OutFile bh.zip
+          Expand-Archive bh.zip -DestinationPath "$env:RUNNER_TEMP\inst"
+          $env:BLOCKHAUS_DATA = "$env:RUNNER_TEMP\bh-data"; $env:BLOCKHAUS_PORT = "8199"
+          Start-Process -FilePath "$env:RUNNER_TEMP\inst\blockhaus\runtime\pythonw.exe" -ArgumentList "$env:RUNNER_TEMP\inst\blockhaus\launch.py","--background"
+          python tests/update_flow.py 8199 "${{ github.event.inputs.want }}"
+          Get-Content "$env:RUNNER_TEMP\inst\blockhaus\app\current"
+          Get-Content "$env:BLOCKHAUS_DATA\blockhaus.log" -Tail 20

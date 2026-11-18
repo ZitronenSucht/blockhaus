@@ -43,7 +43,7 @@ except ImportError:  # direkt als Skript gestartet
     import osutil
     import system
 
-VERSION = "0.1.0"
+VERSION = "0.1.1"
 BASE = osutil.resource_dir(__file__)
 STATIC = os.path.join(BASE, "static")
 DATA = osutil.app_data_dir()
@@ -1751,7 +1751,8 @@ def r_events(h, s, q):
         seq = HUB.seq
         stats, hist, task = HUB.stats, list(HUB.history), HUB.task
     try:
-        send("init", {"logs": [[k, l] for _, k, l in logs], "stats": stats, "history": hist, "task": task})
+        send("init", {"logs": [[k, l] for _, k, l in logs], "stats": stats, "history": hist, "task": task,
+                      "version": VERSION})
         last_stats, last_task = stats, task
         last_ping = now()
         while True:
@@ -5938,15 +5939,21 @@ def main():
             pass
         sys.stdout = sys.stderr = open(log, "a", encoding="utf-8", buffering=1)
         print("──── %s Blockhaus %s ────" % (time.strftime("%Y-%m-%d %H:%M:%S"), VERSION), file=sys.stderr)
-    probe = socket.socket()
-    try:
-        probe.settimeout(1)
-        port_now = int(os.environ.get("BLOCKHAUS_PORT") or os.environ.get("WERKBANK_PORT") or CONF["listen_port"])
-        if probe.connect_ex(("127.0.0.1", port_now)) == 0:
-            print("Port %d ist bereits belegt – läuft Blockhaus schon? (Sonst in der Konfiguration einen anderen Port wählen.)" % port_now, file=sys.stderr)
-            return
-    finally:
-        probe.close()
+    port_now = int(os.environ.get("BLOCKHAUS_PORT") or os.environ.get("WERKBANK_PORT") or CONF["listen_port"])
+    # Nach einem Update/Neustart gibt die alte Instanz den Port gerade erst frei – kurz warten
+    for attempt in range(30 if "--background" in sys.argv else 1):
+        probe = socket.socket()
+        try:
+            probe.settimeout(1)
+            busy = probe.connect_ex(("127.0.0.1", port_now)) == 0
+        finally:
+            probe.close()
+        if not busy:
+            break
+        time.sleep(0.5)
+    else:
+        print("Port %d ist bereits belegt – läuft Blockhaus schon? (Sonst in der Konfiguration einen anderen Port wählen.)" % port_now, file=sys.stderr)
+        return
     try:
         with open(os.path.join(DATA, "blockhaus.pid"), "w") as f:
             f.write(str(os.getpid()))

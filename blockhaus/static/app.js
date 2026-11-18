@@ -322,6 +322,8 @@ function connect() {
   S.es = es;
   es.addEventListener('init', (e) => {
     const d = JSON.parse(e.data);
+    // Nach einem Update läuft eine neue Blockhaus-Version: Seite neu laden, damit auch die Oberfläche neu ist
+    if (d.version && S.me && S.me.appVersion && d.version !== S.me.appVersion) { location.reload(); return; }
     S.logs = d.logs; S.history = d.history; S.task = d.task;
     setStats(d.stats || {}, true);
     renderTask();

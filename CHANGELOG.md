@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.1.1
+
+- Behoben: Das Dashboard sprang bei laufendem Server ständig zwischen „Startet …“ und „Online“ (vor allem unter macOS)
+- Updates: Neustart nach dem Update ist zuverlässiger, die Oberfläche lädt sich danach automatisch neu
+- Fixed: the dashboard kept flipping between “Starting …” and “Online” while the server was running (mainly on macOS)
+
 ## 0.1.0
 
 Erste Version von Blockhaus.
