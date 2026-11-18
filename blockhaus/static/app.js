@@ -113,7 +113,7 @@ const fmtBytes = (b) => {
   if (b == null) return '–';
   const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0;
   while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
-  return `${b.toFixed(b >= 100 || i === 0 ? 0 : 1).replace('.', ',')} ${u[i]}`;
+  return `${b.toFixed(b >= 100 || i === 0 ? 0 : 1).replace('.', I18N.dec)} ${u[i]}`;
 };
 const fmtDur = (s) => {
   if (s == null) return '–';
@@ -134,8 +134,8 @@ const fmtAgo = (t) => {
   if (s < 86400 * 30) return `vor ${Math.floor(s / 86400)} T`;
   return fmtDate(t);
 };
-const fmtDate = (t) => new Date(t * 1000).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-const num = (v, d = 0) => (v == null || Number.isNaN(v) ? '–' : Number(v).toFixed(d).replace('.', ','));
+const fmtDate = (t) => new Date(t * 1000).toLocaleString(I18N.locale, { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+const num = (v, d = 0) => (v == null || Number.isNaN(v) ? '–' : Number(v).toFixed(d).replace('.', I18N.dec));
 const headUrl = (p) => `https://mc-heads.net/avatar/${encodeURIComponent(p.uuid || p.name || p)}/64`;
 const headImg = (p, cls = 'head') => {
   const name = p.name || p;
@@ -164,6 +164,7 @@ async function api(path, opts = {}) {
   if (opts.raw !== undefined) { o.body = opts.raw; o.headers['Content-Type'] = 'application/octet-stream'; }
   else if (opts.body !== undefined) { o.body = JSON.stringify(opts.body); o.headers['Content-Type'] = 'application/json'; }
   if (o.method !== 'GET') o.headers['X-CSRF'] = S.csrf;
+  o.headers['X-Lang'] = I18N.lang;
   let r;
   try { r = await fetch(path, o); } catch { throw new Error('Panel nicht erreichbar'); }
   let j = {};
@@ -250,11 +251,13 @@ async function showLogin() {
   S.me = null;
   try { const st = await api('/api/setup/status'); if (st.needed) { showSetup(st); return; } } catch { /* weiter zum Login */ }
   $('#setup').hidden = true;
+  $('#login-lang').value = I18N.lang;
   $('#app').hidden = true; $('#login').hidden = false;
   $('#palette').hidden = true; $('#modal').hidden = true;
   setTimeout(() => $('#login-form [name=user]').focus(), 50);
 }
 
+$('#login-lang').onchange = (e) => setLanguage(e.target.value);
 $('#login-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const f = e.target, btn = $('button', f);
@@ -270,6 +273,10 @@ $('#login-form').addEventListener('submit', async (e) => {
 async function boot() {
   let me;
   try { me = await api('/api/me'); } catch { return showLogin(); }
+  if (me.language && me.language !== I18N.lang) {  // Sprache aus dem Konto (gilt auf allen Geräten)
+    try { localStorage.setItem('bh.lang', me.language); } catch { /* privat */ }
+    location.reload(); return;
+  }
   S.me = me; S.csrf = me.csrf;
   $('#login').hidden = true; $('#app').hidden = false;
   $('#me-name').textContent = me.user;
@@ -575,7 +582,7 @@ VIEWS.overview = (v) => {
   </div>
   <div class="grid g-main" style="margin-top:16px">
     <a class="card" href="#/console" style="text-decoration:none;color:inherit"><div class="card-h"><h2>Live-Log</h2><span class="sub">zum Öffnen klicken</span></div><div class="mini-log" id="ov-log"></div></a>
-    <div class="card"><div class="card-h"><h2>System</h2><span class="sub">Proxmox-VM</span></div><div id="ov-sys"></div></div>
+    <div class="card"><div class="card-h"><h2>System</h2><span class="sub">Rechner</span></div><div id="ov-sys"></div></div>
   </div>`;
 
   let chartKey = store.get('chartKey', 'mspt');
@@ -607,7 +614,7 @@ VIEWS.overview = (v) => {
     if (s.uptime != null) parts.push(`${num(s.uptime * 100, s.uptime > 0.995 && s.uptime < 1 ? 1 : 0)} % online`);
     if (s.heapMax) parts.push(`RAM bis ${fmtBytes(s.heapMax)}`);
     const coverage = s.first ? (hist.now - s.first) / (hist.now - hist.since) : 0;
-    if (s.first && coverage < 0.9) parts.push(`seit ${new Date(s.first * 1000).toLocaleString('de-DE', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
+    if (s.first && coverage < 0.9) parts.push(`seit ${new Date(s.first * 1000).toLocaleString(I18N.locale, { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' })}`);
     $('#ov-sum', v).textContent = parts.join(' · ');
     chart.draw(chartKey, data, { t0: hist.since, t1: hist.now, bucket: hist.bucket });
   };
@@ -813,7 +820,7 @@ function makeChart(wrap) {
     c.setLineDash([]);
     if (!data || data.length < (opt.live ? 2 : 1)) {
       c.fillStyle = muted; c.textAlign = 'center';
-      c.fillText(opt.live ? (S.stats.state === 'active' ? 'Daten werden gesammelt …' : 'Keine Daten – Server ist offline') : 'Für diesen Zeitraum gibt es noch keine Daten', w / 2, h / 2);
+      c.fillText(tr(opt.live ? (S.stats.state === 'active' ? 'Daten werden gesammelt …' : 'Keine Daten – Server ist offline') : 'Für diesen Zeitraum gibt es noch keine Daten'), w / 2, h / 2);
       pts = []; tip.hidden = true; return;
     }
     const t1 = opt.t1 || data[data.length - 1].t, t0 = opt.t0 || Math.min(data[0].t, t1 - 60);
@@ -851,8 +858,8 @@ function makeChart(wrap) {
     // Achsen-Beschriftung
     c.fillStyle = muted; c.textAlign = 'left'; c.fillText(`max ${cf.fmt(mx)}`, padL, 10);
     const span = t1 - t0;
-    const lbl = (t) => { const d = new Date(t * 1000); return span > 2 * 86400 ? d.toLocaleDateString('de-DE', { weekday: 'short', day: 'numeric' }) : d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' }); };
-    if (opt.live) { c.textAlign = 'right'; c.fillText('jetzt', w - padR, h - 5); c.textAlign = 'left'; c.fillText(`−${Math.max(1, Math.round(span / 60))} Min`, padL, h - 5); }
+    const lbl = (t) => { const d = new Date(t * 1000); return span > 2 * 86400 ? d.toLocaleDateString(I18N.locale, { weekday: 'short', day: 'numeric' }) : d.toLocaleTimeString(I18N.locale, { hour: '2-digit', minute: '2-digit' }); };
+    if (opt.live) { c.textAlign = 'right'; c.fillText(tr('jetzt'), w - padR, h - 5); c.textAlign = 'left'; c.fillText(`−${Math.max(1, Math.round(span / 60))} Min`, padL, h - 5); }
     else {
       const n = w < 500 ? 3 : 5;
       for (let i = 0; i <= n; i++) { const t = t0 + span * i / n; c.textAlign = i === 0 ? 'left' : i === n ? 'right' : 'center'; c.fillText(i === n ? 'jetzt' : lbl(t), X(t), h - 5); }
@@ -862,8 +869,8 @@ function makeChart(wrap) {
       c.strokeStyle = muted; c.lineWidth = 1; c.beginPath(); c.moveTo(p.x, padT); c.lineTo(p.x, h - padB); c.stroke();
       c.beginPath(); c.arc(p.x, p.y, 5, 0, Math.PI * 2); c.fillStyle = css('--surface'); c.fill(); c.strokeStyle = color; c.lineWidth = 2; c.stroke();
       const d = new Date(p.t * 1000);
-      const when = opt.live ? d.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-        : d.toLocaleString('de-DE', span > 86400 ? { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' });
+      const when = opt.live ? d.toLocaleTimeString(I18N.locale, { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        : d.toLocaleString(I18N.locale, span > 86400 ? { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' } : { hour: '2-digit', minute: '2-digit' });
       tip.textContent = `${opt.live ? '' : 'Ø '}${cf.fmt(p.v)}${p.mx != null && cf.mxLbl ? ` · ${cf.mxLbl} ${cf.fmt(p.mx)}` : ''} · ${when}`;
       tip.hidden = false;
       const tw = tip.offsetWidth;  // Tooltip immer vollständig im Diagramm halten
@@ -1583,7 +1590,7 @@ function countUp(el, ms = 700) {
   const step = (t) => {
     const p = Math.min(1, (t - t0) / ms), e = 1 - Math.pow(1 - p, 3);
     if (!el.isConnected) return;
-    el.textContent = txt.replace(m[0], (target * e).toFixed(dec).replace('.', ','));
+    el.textContent = txt.replace(m[0], (target * e).toFixed(dec).replace('.', I18N.dec));
     if (p < 1) requestAnimationFrame(step); else el.textContent = txt;
   };
   requestAnimationFrame(step);
@@ -1862,7 +1869,7 @@ function genPw() {
 
 // ───────────────────────── Gemeinsame Helfer (Erweiterungen) ─────────────────────────
 const playerColor = (name) => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 70% 58%)`; };
-const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString(I18N.locale, { hour: '2-digit', minute: '2-digit' });
 const dayStart = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x; };
 const WD = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'];
 function tabs(v, sel, items, key, onChange) {
@@ -1914,7 +1921,7 @@ VIEWS.history = (v) => {
             <span class="dbar"><i style="height:${Math.max(3, (x.mins / maxM) * 100)}%"></i></span><small>${WD[(new Date(x.a * 1000).getDay() + 6) % 7]}</small><small class="mono">${new Date(x.a * 1000).getDate()}.</small></button>`).join('')}</div></div>
         <div class="card" style="margin-top:16px">
           <div class="card-h"><button class="icon-btn" data-nav="-1" title="Vorheriger Tag">${ico('chevronLeft')}</button>
-            <h2>${day.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long' })}</h2>
+            <h2>${day.toLocaleDateString(I18N.locale, { weekday: 'long', day: '2-digit', month: 'long' })}</h2>
             <button class="icon-btn" data-nav="1" title="Nächster Tag" ${d0 >= today ? 'disabled' : ''}>${ico('chevron')}</button>
             <span class="sub">${names.length} Spieler</span></div>
           ${names.length ? `<div class="tl"><div class="tl-axis"><span></span><div>${[0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<b style="left:${(h / 24) * 100}%">${h}</b>`).join('')}</div></div>
@@ -2397,7 +2404,7 @@ VIEWS.updates = (v) => {
 const prettyId = (id) => String(id || '').split(':').pop().replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 const DIM_MAP = { overworld: 'world', the_nether: 'world_the_nether', the_end: 'world_the_end' };
 const DIM_NAME = { overworld: 'Oberwelt', the_nether: 'Nether', the_end: 'Ende' };
-const fmtUntil = (t) => new Date(t * 1000).toLocaleString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+const fmtUntil = (t) => new Date(t * 1000).toLocaleString(I18N.locale, { weekday: 'short', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 // ── Karten-Seite: Werkzeuge, Vorschau in der Karte, Render-Status ──
 function mapPage(body, actions) {
@@ -2837,7 +2844,7 @@ VIEWS.content = (v) => {
         <label class="row" style="margin-bottom:14px;gap:10px"><span class="switch"><input type="checkbox" name="required" ${rp.required ? 'checked' : ''}><span></span></span>Pflicht – ohne Paket kein Beitritt</label>
         <div class="row"><button class="btn btn-primary btn-sm">${ico('check')}Übernehmen</button><button type="button" class="btn btn-sm" id="rp-up">${ico('upload')}.zip hier hosten</button>
           ${rp.url ? '<button type="button" class="btn btn-sm btn-ghost" id="rp-clear">Entfernen</button>' : ''}<input type="file" id="rp-file" accept=".zip" hidden></div>
-        <p class="muted" style="font-size:12px;margin:12px 0 0">Die Prüfsumme berechnet das Panel automatisch. „Hier hosten“ legt die Datei auf den Karten-Webserver (Port ${esc(data.mapPort)}) – damit Freunde von außen sie laden können, muss dieser Port in der FritzBox freigegeben sein. Änderungen wirken nach einem Neustart.</p></form>`;
+        <p class="muted" style="font-size:12px;margin:12px 0 0">Die Prüfsumme berechnet das Panel automatisch. „Hier hosten“ legt die Datei auf den Karten-Webserver (Port ${esc(data.mapPort)}) – damit Freunde von außen sie laden können, muss dieser Port im Router freigegeben sein. Änderungen wirken nach einem Neustart.</p></form>`;
     $('#rp-form', v).onsubmit = async (e) => {
       e.preventDefault();
       const f = e.target;
@@ -3313,7 +3320,7 @@ function showSetup(st) {
     <div class="brand brand-lg">${LOGO}<div><b>Blockhaus</b><small>Version ${esc(st.version)} · ${esc(st.os)}</small></div></div>
     <h2 class="setup-h">Willkommen!</h2>
     <p class="setup-p">In wenigen Schritten läuft dein eigener Minecraft-Server. Lege zuerst dein Admin-Konto an – damit meldest du dich später bei Blockhaus an.</p>
-    <label class="field"><span>Sprache</span><select class="input" name="language"><option value="de">Deutsch</option><option value="en">English (in Arbeit)</option></select></label>
+    <label class="field"><span>Sprache</span><select class="input" name="language" id="setup-lang" translate="no">${LANGS.map(([k, n]) => `<option value="${k}" ${k === I18N.lang ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
     ${st.needsCode ? `<label class="field"><span>Einrichtungs-Code</span><input class="input mono" name="code" inputmode="numeric" maxlength="6" required placeholder="6 Ziffern" autocomplete="one-time-code">
       <small class="field-hint">Du rufst Blockhaus über das Netzwerk auf. Den Code zeigt Blockhaus im Terminal bzw. im Log an.</small></label>` : ''}
     <label class="field"><span>Benutzername</span><input class="input" name="user" required minlength="2" maxlength="32" autocomplete="username" spellcheck="false" autocapitalize="off"></label>
@@ -3324,6 +3331,7 @@ function showSetup(st) {
     <p class="login-foot">Blockhaus ist kein offizielles Minecraft-Produkt und nicht mit Mojang oder Microsoft verbunden.</p>
   </form>`;
   const f = $('#setup-form', box);
+  $('#setup-lang', f).onchange = (e) => setLanguage(e.target.value);
   setTimeout(() => $('[name=code], [name=user]', f).focus(), 50);
   f.onsubmit = async (e) => {
     e.preventDefault();
@@ -3511,9 +3519,9 @@ VIEWS.create = (v) => {
   }
   const paint = (lines) => {
     const box = $('#w-log', v); if (!box) return;
-    lines.filter(([k, l]) => (k === 'sys' || k === 'err') && /^(Einrichtung|Java|Einrichtung fehlgeschlagen)/.test(l)).forEach(([k, l]) => {
-      const el = document.createElement('div'); el.className = 'l ' + k; el.textContent = l.replace(/^Einrichtung: /, ''); box.append(el);
-      if (/fehlgeschlagen/.test(l)) failed(l);
+    lines.filter(([k, l]) => (k === 'sys' || k === 'err') && /^(Einrichtung|Setup|Java)/.test(l)).forEach(([k, l]) => {
+      const el = document.createElement('div'); el.className = 'l ' + k; el.textContent = l.replace(/^(Einrichtung|Setup): /, ''); box.append(el);
+      if (/^(Einrichtung fehlgeschlagen|Setup failed)/.test(l)) failed(l);
     });
     box.scrollTop = box.scrollHeight;
   };
@@ -3529,7 +3537,7 @@ VIEWS.create = (v) => {
   }
   function failed(line) {
     const t = $('#w-ptitle', v); if (t) t.textContent = 'Das hat nicht geklappt';
-    const p = $('#w-pmsg', v); if (p) p.textContent = line.replace(/^Einrichtung fehlgeschlagen: /, '');
+    const p = $('#w-pmsg', v); if (p) p.textContent = line.replace(/^(Einrichtung fehlgeschlagen|Setup failed): /, '');
     const sp = $('.spinner', body); if (sp) sp.remove();
     if (!$('#w-retry', body)) body.insertAdjacentHTML('beforeend', '<button class="btn" id="w-retry" type="button">Zurück zum Assistenten</button>');
     $('#w-retry', body).onclick = () => { done = false; step = order().length - 1; $('#w-next', v).disabled = false; render(); };
@@ -3579,10 +3587,12 @@ async function resourcesCard(el) {
         <label class="row"><span class="switch"><input type="checkbox" id="r-ar" ${st.auto_restart ? 'checked' : ''} ${st.control === 'systemd' ? 'disabled' : ''}><span></span></span>Nach Absturz automatisch neu starten</label>
         <label class="row"><span class="switch"><input type="checkbox" id="r-lan" ${st.listen_host === '0.0.0.0' ? 'checked' : ''}><span></span></span><span>Blockhaus auch von anderen Geräten im Heimnetz erreichbar<br><small class="muted">z. B. vom Handy: http://${esc(sys.lanIp)}:…</small></span></label>
         <label class="field" style="margin-top:6px"><span>Adresse für Spieler (optional, z. B. DynDNS-Name)</span><input class="input mono" id="r-addr" value="${esc(st.public_address || '')}" placeholder="${esc(sys.lanIp)}"></label>
+        <label class="field" style="margin:0"><span>Sprache</span><select class="input" id="r-lang" translate="no" style="max-width:200px">${LANGS.map(([k, n]) => `<option value="${k}" ${k === I18N.lang ? 'selected' : ''}>${n}</option>`).join('')}</select></label>
         <p class="muted" style="font-size:12.5px;margin:0">Java: ${st.java === 'auto' ? `automatisch${r.java.managed.length ? ` (geladen: ${r.java.managed.map((j) => 'Java ' + j).join(', ')})` : ''}` : esc(st.java)}</p>
       </div>
     </div>
     <div class="row" style="margin-top:16px"><button class="btn btn-primary btn-sm" id="r-save">${ico('save')}Speichern</button><span class="muted" id="r-msg" style="font-size:13px"></span></div></div>`;
+  $('#r-lang', el).onchange = (e) => setLanguage(e.target.value);
   $('#r-ram', el).oninput = (e) => { ram = +e.target.value; $('#r-ramv', el).textContent = mb2gb(ram); };
   $('#r-st', el).onchange = (e) => { $('#r-st-row', el).hidden = !e.target.checked; };
   $('#r-save', el).onclick = async () => {
@@ -3597,4 +3607,4 @@ async function resourcesCard(el) {
   hydrateIcons(el);
 }
 
-boot();
+i18nInit().then(boot);

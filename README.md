@@ -27,11 +27,17 @@ or wherever `BLOCKHAUS_DATA` points.
 
 ## Roadmap
 
-1. OS-independent core (process control, backups, metrics, Java download) – *in progress*
-2. First-run setup wizard: create a server, choose RAM and storage limits
-3. German / English
+1. OS-independent core (process control, backups, metrics, Java download) – *done*
+2. First-run setup wizard: create a server, choose RAM and storage limits – *done*
+3. German / English – *done*
 4. Guided introduction
 5. Installers for Linux, macOS and Windows (terminal or desktop app), one-click updates, autostart, full uninstall
+
+## Translations
+
+German is the source language in the code. English lives in `blockhaus/static/i18n/en.json` (UI) and
+`blockhaus/i18n_en.json` (server messages); keys are the German texts, `{0}`/`%s` are placeholders.
+`python3 tools/extract_strings.py` lists texts that still need a translation (CI fails if any are missing).
 
 ## License
 

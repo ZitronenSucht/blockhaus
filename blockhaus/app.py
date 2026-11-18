@@ -152,6 +152,62 @@ def set_user_pw(name, pw):
         save_json(USERS_PATH, users)
 
 
+def set_user_lang(name, lang):
+    with users_lock:
+        users = get_users()
+        if name in users and lang in ("de", "en"):
+            users[name]["lang"] = lang
+            save_json(USERS_PATH, users)
+
+
+# ───────────────────────── Übersetzung (Meldungen des Servers) ─────────────────────────
+# Deutsch ist die Quellsprache. i18n_en.json bildet deutsche Formatstrings (mit %s, %d …) auf Englisch ab.
+
+I18N_PY = load_json(os.path.join(BASE, "i18n_en.json"), {})
+_FMT = re.compile(r"%(?:\.\d+)?[sdfr]")
+_tr_pats = []
+for _de, _en in I18N_PY.items():
+    if _FMT.search(_de):
+        _rx = re.escape(_FMT.sub("TRSLOTX", _de).replace("%%", "%")).replace("TRSLOTX", "(.+?)")
+        _tr_pats.append((len(_FMT.sub("", _de)), re.compile("^" + _rx + "$", re.S), _en))
+_tr_pats.sort(key=lambda x: -x[0])  # spezifischere Muster zuerst
+TR_PREFIXES = (("Update: ", "Update: "), ("Einrichtung: ", "Setup: "))
+_tl = threading.local()
+
+
+def lang_now():
+    return getattr(_tl, "lang", None) or CONF.get("language") or "de"
+
+
+def _tr_one(msg):
+    if msg in I18N_PY:
+        return I18N_PY[msg]
+    for _, rx, en in _tr_pats:
+        m = rx.match(msg)
+        if m:
+            vals = iter([I18N_PY.get(v, v) for v in m.groups()])
+            parts = _FMT.split(en.replace("%%", "TRPCTX"))
+            return "".join(p + (str(next(vals, "")) if i < len(parts) - 1 else "")
+                           for i, p in enumerate(parts)).replace("TRPCTX", "%")
+    return None
+
+
+def tr_msg(msg, lang=None):
+    """Meldung in die Sprache lang (Standard: die der aktuellen Anfrage bzw. die eingestellte) übersetzen."""
+    lang = lang or lang_now()
+    if lang == "de" or not isinstance(msg, str) or not msg:
+        return msg
+    hit = _tr_one(msg)
+    if hit is None and msg[:1].isupper():
+        h2 = _tr_one(msg[0].lower() + msg[1:])
+        hit = h2[0].upper() + h2[1:] if h2 else None
+    if hit is None:
+        for de_p, en_p in TR_PREFIXES:
+            if msg.startswith(de_p):
+                return en_p + tr_msg(msg[len(de_p):], lang)
+    return msg if hit is None else hit
+
+
 def audit(user, ip, action, detail=""):
     line = json.dumps({"t": now(), "user": user, "ip": ip, "action": action, "detail": detail},
                       ensure_ascii=False)
@@ -397,6 +453,8 @@ class Hub:
         self.task = None  # laufende Hintergrundaufgabe (Backup/Restore/Neustart)
 
     def push_log(self, line, kind="log"):
+        if kind in ("sys", "err"):
+            line = tr_msg(line, CONF.get("language") or "de")
         if "spark.lucko.me/" in line:
             spark_record(line)
         if kind == "log" and " joined the game" in line:
@@ -414,6 +472,8 @@ class Hub:
             self.cond.notify_all()
 
     def set_task(self, task):
+        if task and task.get("msg"):
+            task = dict(task, msg=tr_msg(task["msg"], CONF.get("language") or "de"))
         with self.cond:
             self.seq += 1
             self.task = task
@@ -1457,6 +1517,8 @@ class Handler(BaseHTTPRequestHandler):
         self.route("PUT")
 
     def route(self, method):
+        lang = self.headers.get("X-Lang")
+        _tl.lang = lang if lang in ("de", "en") else None
         url = urllib.parse.urlsplit(self.path)
         path = url.path
         q = {k: v[0] for k, v in urllib.parse.parse_qs(url.query).items()}
@@ -1493,19 +1555,19 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError("Unbekannter Endpunkt", 404)
             return fn(self, s, q)
         except ApiError as e:
-            self.json({"error": str(e)}, e.code)
+            self.json({"error": tr_msg(str(e))}, e.code)
         except RconError as e:
-            self.json({"error": str(e)}, 503)
+            self.json({"error": tr_msg(str(e))}, 503)
         except PermissionError as e:
-            self.json({"error": str(e) or "Keine Berechtigung"}, 403)
+            self.json({"error": tr_msg(str(e) or "Keine Berechtigung")}, 403)
         except FileNotFoundError:
-            self.json({"error": "Nicht gefunden"}, 404)
+            self.json({"error": tr_msg("Nicht gefunden")}, 404)
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception as e:
             print("Fehler:", repr(e), file=sys.stderr)
             try:
-                self.json({"error": str(e) or "Interner Fehler"}, 500)
+                self.json({"error": tr_msg(str(e) or "Interner Fehler")}, 500)
             except OSError:
                 pass
 
@@ -1625,7 +1687,19 @@ def r_me(h, s, q):
     p = read_props()
     h.json({"user": s["user"], "csrf": s["csrf"], "address": CONF.get("public_address") or osutil.lan_ip(),
             "port": p.get("server-port"), "motd": p.get("motd"), "version": server_version(),
-            "hasServer": has_server(), "language": CONF.get("language", "de"), "appVersion": VERSION})
+            "hasServer": has_server(), "appVersion": VERSION,
+            "language": get_users().get(s["user"], {}).get("lang") or CONF.get("language", "de")})
+
+
+@api("POST", "/api/me/language")
+def r_me_language(h, s, q):
+    lang = h.body_json().get("lang")
+    if lang not in ("de", "en"):
+        raise ApiError("Ungültiger Wert")
+    set_user_lang(s["user"], lang)
+    CONF["language"] = lang  # Log- und Fortschrittsmeldungen
+    save_json(CONF_PATH, CONF)
+    h.json({"ok": True})
 
 
 def server_version():
@@ -5369,6 +5443,7 @@ def r_setup_admin(h, s, q):  # öffentlich, aber nur solange es noch keinen Admi
     set_user_pw(user, pw)
     if d.get("language") in ("de", "en"):
         CONF["language"] = d["language"]
+        set_user_lang(user, d["language"])
     save_json(CONF_PATH, CONF)
     audit(user, h.ip(), "einrichtung-admin")
     h.start_session(user)

@@ -158,6 +158,19 @@ class TestOsutil(unittest.TestCase):
         self.assertIn(21, app.managed_javas())
 
 
+class TestI18n(unittest.TestCase):
+    def test_backend_messages(self):
+        from blockhaus import app
+        self.assertEqual(app.tr_msg("Ungültige Version", "en"), "Invalid version")
+        self.assertEqual(app.tr_msg("Ungültige Version", "de"), "Ungültige Version")
+        self.assertEqual(app.tr_msg("Port 25570 ist schon belegt – bitte einen anderen wählen", "en"),
+                         "Port 25570 is already in use – please choose another one")
+        self.assertEqual(app.tr_msg("Update: sichere die Welt …", "en"), "Update: backing up the world …")
+        self.assertEqual(app.tr_msg("Einrichtung: Bereite den Server-Ordner vor …", "en"),
+                         "Setup: Preparing the server folder …")
+        self.assertEqual(app.tr_msg("Etwas ganz anderes", "en"), "Etwas ganz anderes")
+
+
 def free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
@@ -232,6 +245,18 @@ class TestHttp(unittest.TestCase):
         self.assertEqual(r["settings"]["ram_max_mb"], 1536)
         self.assertEqual(r["settings"]["storage_max_gb"], 5.0)
         self.call("/api/panel/settings", {"ram_max_mb": 10}, expect=400)
+        self.assertEqual(self.call("/api/me")["language"], "de")
+        self.call("/api/me/language", {"lang": "en"})
+        self.assertEqual(self.call("/api/me")["language"], "en")
+        req = urllib.request.Request(self.base + "/api/server/create", data=json.dumps(
+            {"mode": "new", "loader": "vanilla", "mc": "26.2"}).encode(), headers={
+            "Content-Type": "application/json", "X-CSRF": self.csrf, "X-Lang": "en"})
+        with self.assertRaises(urllib.error.HTTPError) as cm:
+            self.opener.open(req, timeout=30)
+        self.assertEqual(json.loads(cm.exception.read())["error"],
+                         "A server cannot be created without accepting the Minecraft EULA")
+        en = self.call("/i18n/en.json")
+        self.assertEqual(en["Speichern"], "Save")
         page = self.call("/")
         self.assertIn(b"Blockhaus", page)
 

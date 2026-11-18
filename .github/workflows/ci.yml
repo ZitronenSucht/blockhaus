@@ -30,5 +30,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - name: JavaScript-Syntax prüfen
-        run: node --check blockhaus/static/app.js
+        run: |
+          node --check blockhaus/static/app.js
+          node --check blockhaus/static/i18n.js
+      - name: Alle Texte übersetzt?
+        run: python tools/extract_strings.py --check > /dev/null
+      - name: Übersetzung im Browser (jsdom)
+        working-directory: tests/js
+        run: |
+          npm init -y > /dev/null
+          npm install --silent jsdom@25.0.1
+          node i18n.test.mjs
