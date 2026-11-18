@@ -259,7 +259,7 @@ def main():
     js |= js_fragments(open(os.path.join(PKG, "static", "index.html"), encoding="utf-8").read().replace("`", "'")
                        .join(["`", "`"]))
     py = set()
-    for f in ("app.py", "osutil.py"):
+    for f in ("app.py", "osutil.py", "system.py", "gui.py"):
         py |= py_strings(os.path.join(PKG, f))
     try:
         en_js = json.load(open(os.path.join(PKG, "static", "i18n", "en.json"), encoding="utf-8"))

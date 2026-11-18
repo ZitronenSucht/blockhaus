@@ -45,3 +45,64 @@ jobs:
           npm init -y > /dev/null
           npm install --silent jsdom@25.0.1
           node i18n.test.mjs
+
+  package:
+    name: Paket ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Portables Paket bauen
+        if: runner.os != 'macOS'
+        run: python packaging/build.py portable
+      - name: macOS-App (.dmg) bauen
+        if: runner.os == 'macOS'
+        run: python packaging/build.py macapp
+      - name: Windows-Installer bauen
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = (Select-String -Path blockhaus/app.py -Pattern '^VERSION = "(.+)"').Matches[0].Groups[1].Value
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" packaging\windows\blockhaus.iss
+      - name: Installieren, starten, deinstallieren (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          pkg=$(ls dist/blockhaus-*.tar.gz | head -1)
+          sh packaging/install.sh --from "$pkg" --server --no-autostart --local --dir "$RUNNER_TEMP/bh" --no-start
+          export BLOCKHAUS_DATA="$RUNNER_TEMP/bh-data"
+          ~/.local/bin/blockhaus version
+          (BLOCKHAUS_PORT=8199 ~/.local/bin/blockhaus --background &)
+          for i in $(seq 1 30); do curl -fs http://127.0.0.1:8199/api/setup/status && break; sleep 1; done
+          echo
+          curl -fs http://127.0.0.1:8199/api/setup/status | grep -q '"needed": true'
+          ~/.local/bin/blockhaus uninstall --yes --delete-worlds
+          test ! -d "$RUNNER_TEMP/bh" && test ! -d "$BLOCKHAUS_DATA" && test ! -e ~/.local/bin/blockhaus
+          echo "Installation und Deinstallation ok"
+      - name: Starten und deinstallieren (Windows, portables Paket)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:BLOCKHAUS_DATA = "$env:RUNNER_TEMP\bh-data"
+          $py = "build\blockhaus\runtime\python.exe"
+          & $py build\blockhaus\launch.py version
+          $p = Start-Process -FilePath $py -ArgumentList "build\blockhaus\launch.py","--background" -PassThru -WindowStyle Hidden -Environment @{ BLOCKHAUS_PORT = "8199" }
+          $ok = $false
+          for ($i = 0; $i -lt 30; $i++) { try { $r = Invoke-RestMethod http://127.0.0.1:8199/api/setup/status; $ok = $r.needed; break } catch { Start-Sleep 1 } }
+          if (-not $ok) { throw "Blockhaus antwortet nicht" }
+          & $py build\blockhaus\launch.py uninstall --yes --delete-worlds --keep-program
+          Start-Sleep 2
+          if (Test-Path $env:BLOCKHAUS_DATA) { throw "Daten nicht entfernt" }
+          & $py -c "import webview; print('pywebview', webview.__version__)"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pakete-${{ matrix.os }}
+          path: dist/
+          retention-days: 7

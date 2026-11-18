@@ -1,0 +1,75 @@
+name: Release
+
+# Neues Release:  Version in blockhaus/app.py erhöhen, committen, dann  git tag vX.Y.Z && git push --tags
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: linux-x86_64, os: ubuntu-latest }
+          - { name: linux-aarch64, os: ubuntu-24.04-arm }
+          - { name: macos-aarch64, os: macos-latest }
+          - { name: macos-x86_64, os: macos-15-intel }
+          - { name: windows-x86_64, os: windows-latest }
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Version prüfen
+        shell: bash
+        run: |
+          v=$(sed -n 's/^VERSION = "\(.*\)"/\1/p' blockhaus/app.py)
+          [ "v$v" = "${GITHUB_REF_NAME}" ] || { echo "Tag ${GITHUB_REF_NAME} passt nicht zu VERSION $v"; exit 1; }
+      - name: Bauen
+        shell: bash
+        run: |
+          if [ "$RUNNER_OS" = macOS ]; then python packaging/build.py macapp; else python packaging/build.py portable; fi
+      - name: Windows-Installer
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $v = "${env:GITHUB_REF_NAME}".TrimStart("v")
+          & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$v" packaging\windows\blockhaus.iss
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.name }}
+          path: dist/
+
+  release:
+    needs: build
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Dateien zusammenstellen
+        run: |
+          mkdir -p release
+          find artifacts -type f -exec cp {} release/ \;
+          python packaging/build.py app && cp dist/blockhaus-app-*.zip release/
+          cp packaging/install.sh release/
+          cd release && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Release veröffentlichen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          notes=$(python packaging/release_notes.py "${GITHUB_REF_NAME}")
+          gh release create "${GITHUB_REF_NAME}" release/* --title "Blockhaus ${GITHUB_REF_NAME#v}" --notes "$notes"

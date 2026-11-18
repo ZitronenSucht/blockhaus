@@ -38,9 +38,10 @@ from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
-    from . import osutil
+    from . import osutil, system
 except ImportError:  # direkt als Skript gestartet
     import osutil
+    import system
 
 VERSION = "0.1.0"
 BASE = osutil.resource_dir(__file__)
@@ -5336,6 +5337,13 @@ def setup_code():
     if SETUP["code"] is None:
         SETUP["code"] = "%06d" % secrets.randbelow(10 ** 6)
         print("\n  Blockhaus-Einrichtung: Code für den Zugriff über das Netzwerk: %s\n" % SETUP["code"], file=sys.stderr)
+        try:
+            p = os.path.join(DATA, "setup-code")
+            with open(p, "w", encoding="utf-8") as f:
+                f.write(SETUP["code"])
+            os.chmod(p, 0o600)
+        except OSError:
+            pass
     return SETUP["code"]
 
 
@@ -5441,6 +5449,7 @@ def r_setup_admin(h, s, q):  # öffentlich, aber nur solange es noch keinen Admi
         if get_users():
             raise ApiError("Blockhaus ist bereits eingerichtet", 403)
     set_user_pw(user, pw)
+    _unlink(os.path.join(DATA, "setup-code"))
     if d.get("language") in ("de", "en"):
         CONF["language"] = d["language"]
         set_user_lang(user, d["language"])
@@ -5704,7 +5713,116 @@ api("GET", "/api/metrics")(r_metrics)
 def r_panel_restart(h, s, q):
     act(h, s, "panel-neustart")
     h.json({"ok": True})
-    threading.Timer(0.5, lambda: os._exit(3)).start()  # systemd (Restart=on-failure) startet das Panel neu
+    threading.Timer(0.5, restart_self).start()
+
+
+def restart_self():
+    """Blockhaus neu starten. Der Minecraft-Server läuft dabei weiter und wird danach wieder übernommen."""
+    if os.environ.get("INVOCATION_ID"):  # unter systemd: Dienst startet bei Exit-Code ≠ 0 neu
+        os._exit(3)
+    system.restart_detached("--background", gui=True)
+    os._exit(0)
+
+
+# ── Programm: Version, Updates, Autostart, Beenden, Deinstallieren ──
+
+_update = {"checked": 0, "info": None}
+
+
+@api("GET", "/api/system")
+def r_system(h, s, q):
+    info = system.install_info()
+    h.json({"version": VERSION, "install": info, "autostart": system.autostart_status(),
+            "dataDir": DATA, "serverDir": CONF["server_dir"], "backupDir": CONF["backup_dir"],
+            "update": _update["info"], "canUpdate": bool(info["installed"]), "os": system_info()["os"]})
+
+
+@api("POST", "/api/system/autostart")
+def r_system_autostart(h, s, q):
+    on = bool(h.body_json().get("on"))
+    try:
+        state = system.set_autostart(on)
+    except Exception as e:
+        raise ApiError("Autostart konnte nicht geändert werden: %s" % e)
+    act(h, s, "autostart-system", "an" if state else "aus")
+    h.json({"ok": True, "autostart": state})
+
+
+@api("GET", "/api/system/update")
+def r_system_update_check(h, s, q):
+    if q.get("force") or now() - _update["checked"] > 3600 or not _update["info"]:
+        try:
+            _update["info"] = system.check_update(VERSION)
+        except Exception as e:
+            raise ApiError("Update-Prüfung nicht möglich: %s" % e, 502)
+        _update["checked"] = now()
+    h.json(_update["info"])
+
+
+@api("POST", "/api/system/update")
+def r_system_update(h, s, q):
+    if not system.home():
+        raise ApiError("Updates gibt es nur für installierte Versionen (nicht beim Start aus dem Quellcode)")
+    if update_lock.locked():
+        raise ApiError("Es läuft bereits eine Aufgabe")
+    info = system.check_update(VERSION)
+    if not info.get("available"):
+        raise ApiError("Keine Updates verfügbar")
+    act(h, s, "blockhaus-update", "%s → %s" % (VERSION, info["version"]))
+
+    def job():
+        with update_lock:
+            try:
+                ver = system.apply_update(info, progress=lambda m: HUB.set_task({"kind": "selfupdate", "msg": m[0].upper() + m[1:], "t": now()}))
+                HUB.push_log("Blockhaus %s installiert – startet neu …" % ver, "sys")
+            except Exception as e:
+                HUB.set_task(None)
+                HUB.push_log("Update fehlgeschlagen: %s" % e, "err")
+                return
+        time.sleep(1)
+        restart_self()
+    threading.Thread(target=job, daemon=True).start()
+    h.json({"ok": True, "version": info["version"]})
+
+
+@api("POST", "/api/panel/quit")
+def r_panel_quit(h, s, q):
+    d = h.body_json()
+    act(h, s, "blockhaus-beendet", "mit Server" if d.get("stopServer") else "")
+    h.json({"ok": True})
+
+    def bye():
+        if d.get("stopServer") and svc_info().get("ActiveState") == "active":
+            try:
+                svc_action("stop")
+            except Exception:
+                pass
+        os._exit(0)
+    threading.Timer(0.5, bye).start()
+
+
+@api("POST", "/api/system/uninstall")
+def r_system_uninstall(h, s, q):
+    d = h.body_json()
+    if str(d.get("confirm", "")).strip().lower() not in ("deinstallieren", "uninstall"):
+        raise ApiError("Bitte zur Bestätigung „deinstallieren“ eintippen")
+    if update_lock.locked() or backup_lock.locked():
+        raise ApiError("Es läuft bereits eine Aufgabe")
+    keep = bool(d.get("keepWorlds", True))
+    audit(s["user"], h.ip(), "blockhaus-deinstalliert", "Welten behalten" if keep else "alles gelöscht")
+    h.json({"ok": True})
+
+    def job():
+        time.sleep(0.5)
+        if svc_info().get("ActiveState") == "active":
+            try:
+                svc_action("stop")
+            except Exception:
+                pass
+        system.uninstall(DATA, keep_worlds=keep, server_dir=CONF["server_dir"], backup_dir=CONF["backup_dir"],
+                         log=lambda m: print(m, file=sys.stderr))
+        os._exit(0)
+    threading.Thread(target=job, daemon=True).start()
 
 
 # ───────────────────────── Start ─────────────────────────
@@ -5725,6 +5843,59 @@ def ensure_rcon():
 
 
 def cli():
+    args = sys.argv[1:]
+    if args[:1] in (["version"], ["--version"]):
+        print("Blockhaus %s" % VERSION)
+        return True
+    if args[:1] in (["--gui"], ["--browser"]):
+        try:
+            from . import gui
+        except ImportError:
+            import gui
+        sys.exit(gui.main(CONF, browser=args[0] == "--browser"))
+    if args[:1] == ["setup-code"]:
+        try:
+            with open(os.path.join(DATA, "setup-code"), encoding="utf-8") as f:
+                print("Einrichtungs-Code:", f.read().strip())
+        except OSError:
+            print("Blockhaus ist bereits eingerichtet (oder noch nicht gestartet).")
+        return True
+    if args[:1] == ["autostart"]:
+        if args[1:2] in (["on"], ["off"]):
+            system.set_autostart(args[1] == "on")
+        print("Autostart:", "an" if system.autostart_status() else "aus")
+        return True
+    if args[:1] == ["update"]:
+        info = system.check_update(VERSION)
+        if not info.get("available"):
+            print("Blockhaus %s ist aktuell." % VERSION)
+        elif "--check" in args:
+            print("Neue Version verfügbar: %s (installiert: %s)" % (info["version"], VERSION))
+        else:
+            print("Installiert:", system.apply_update(info, progress=print), "– bitte Blockhaus neu starten")
+        return True
+    if args[:1] == ["uninstall"]:
+        keep = "--delete-worlds" not in args
+        if "--yes" not in args:
+            print("Blockhaus wird entfernt (Autostart, Einstellungen, Java%s)." %
+                  (", Server und Backups werden nach ~/Blockhaus-Sicherung-… verschoben" if keep
+                   else " UND Server, Welten und Backups"))
+            if input("Zum Bestätigen „deinstallieren“ eintippen: ").strip().lower() not in ("deinstallieren", "uninstall"):
+                print("Abgebrochen.")
+                return True
+        try:  # laufendes Blockhaus im Hintergrund beenden, damit keine Dateien mehr gesperrt sind
+            with open(os.path.join(DATA, "blockhaus.pid")) as f:
+                pid = int(f.read().strip() or 0)
+            if pid and pid != os.getpid() and osutil.pid_alive(pid):
+                osutil.kill_pid(pid)
+                time.sleep(1.5)
+        except (OSError, ValueError):
+            pass
+        if not use_systemd() and server_proc().info()["ActiveState"] == "active":
+            server_proc().stop()
+        system.uninstall(DATA, keep_worlds=keep, server_dir=CONF["server_dir"], backup_dir=CONF["backup_dir"],
+                         remove_program="--keep-program" not in args)
+        return True
     if len(sys.argv) >= 3 and sys.argv[1] in ("adduser", "passwd"):
         name = sys.argv[2]
         pw = sys.argv[3] if len(sys.argv) > 3 else secrets.token_urlsafe(12)
@@ -5743,9 +5914,34 @@ def main():
     os.makedirs(DATA, exist_ok=True)
     if cli():
         return
+    if "--background" in sys.argv:  # ohne Konsole: Ausgaben ins Log (wird bei 5 MB neu begonnen)
+        log = os.path.join(DATA, "blockhaus.log")
+        try:
+            if os.path.getsize(log) > 5 * 1024 * 1024:
+                os.replace(log, log + ".1")
+        except OSError:
+            pass
+        sys.stdout = sys.stderr = open(log, "a", encoding="utf-8", buffering=1)
+        print("──── %s Blockhaus %s ────" % (time.strftime("%Y-%m-%d %H:%M:%S"), VERSION), file=sys.stderr)
+    probe = socket.socket()
+    try:
+        probe.settimeout(1)
+        port_now = int(os.environ.get("BLOCKHAUS_PORT") or os.environ.get("WERKBANK_PORT") or CONF["listen_port"])
+        if probe.connect_ex(("127.0.0.1", port_now)) == 0:
+            print("Port %d ist bereits belegt – läuft Blockhaus schon? (Sonst in der Konfiguration einen anderen Port wählen.)" % port_now, file=sys.stderr)
+            return
+    finally:
+        probe.close()
+    try:
+        with open(os.path.join(DATA, "blockhaus.pid"), "w") as f:
+            f.write(str(os.getpid()))
+    except OSError:
+        pass
     if not get_users():
         print("Blockhaus ist noch nicht eingerichtet – bitte im Browser öffnen und den Assistenten durchlaufen.",
               file=sys.stderr)
+        if CONF.get("listen_host") not in ("127.0.0.1", "localhost", "::1"):
+            setup_code()  # Einrichtung übers Netzwerk: Code gleich bereitstellen („blockhaus setup-code“)
     if not os.path.exists(CONF_PATH):
         save_json(CONF_PATH, CONF)
     has_server = os.path.isfile(srv("server.properties"))

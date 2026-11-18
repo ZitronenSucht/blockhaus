@@ -1371,7 +1371,7 @@ VIEWS.settings = (v) => {
   let orig = {}, cur = {}, locked = [], q = '';
   v.innerHTML = `${head('Einstellungen', 'server.properties – die meisten Änderungen werden erst nach einem Neustart aktiv.',
     `<div class="search-in"><span class="ico" data-i="search"></span><input class="input" id="s-q" placeholder="Einstellung suchen …" style="width:220px"></div>`)}
-    <div id="s-res"></div><div id="s-list"></div>
+    <div id="s-res"></div><div id="s-sys"></div><div id="s-list"></div>
     <div class="settings-layout"><nav class="toc" id="s-toc"></nav><div id="s-body"><div class="card"><div class="skeleton"></div></div></div></div>`;
   const known = new Set(PROPS.flatMap(([, , items]) => items.map((i) => i[0])));
   function control(key, def) {
@@ -1436,6 +1436,7 @@ VIEWS.settings = (v) => {
   });
   $('#s-q', v).oninput = (e) => { q = e.target.value.trim().toLowerCase(); render(); };
   resourcesCard($('#s-res', v));
+  systemCard($('#s-sys', v));
   if (S.me.hasServer) serverListCard($('#s-list', v));
   api('/api/properties').then((r) => { orig = r.props; cur = { ...orig }; locked = r.locked; render(); hydrateIcons(v); })
     .catch((e) => { $('#s-body', v).innerHTML = `<div class="card"><div class="empty">${esc(e.message)}</div></div>`; });
@@ -3764,6 +3765,64 @@ function startTour(force) {
 async function maybeTour() {
   if (!S.me || !S.me.hasServer || S.tourShown) return;
   try { const r = await api('/api/onboarding'); if (!r.tourDone) setTimeout(() => startTour(false), 600); } catch { /* egal */ }
+}
+
+// Einstellungen: Programm (Version, Updates, Start mit dem Rechner, Beenden, Deinstallieren)
+async function systemCard(el) {
+  let r;
+  try { r = await api('/api/system'); } catch (e) { el.innerHTML = ''; return; }
+  const inst = r.install;
+  el.innerHTML = `<div class="card" style="margin-bottom:18px"><div class="card-h"><h2>Blockhaus</h2><span class="sub no-i18n">Version ${esc(r.version)}</span></div>
+    <div class="grid g-2" style="gap:22px">
+      <div>
+        <div class="row" style="gap:10px"><button class="btn btn-sm" id="y-check">${ico('refresh')}Nach Updates suchen</button><span id="y-upd" class="muted" style="font-size:13px"></span></div>
+        <div id="y-upd-box"></div>
+        ${inst.installed ? '' : '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Aus dem Quellcode gestartet – Updates kommen hier über git.</p>'}
+        <label class="row" style="margin-top:16px"><span class="switch"><input type="checkbox" id="y-auto" ${r.autostart ? 'checked' : ''}><span></span></span><span>Blockhaus beim Start des Rechners im Hintergrund starten<br><small class="muted">${esc({ Windows: 'beim Anmelden bei Windows', macOS: 'beim Anmelden am Mac', Linux: 'beim Hochfahren (systemd-Benutzerdienst)' }[r.os] || '')}</small></span></label>
+        <p class="muted" style="font-size:12.5px;margin:8px 0 0">Zusammen mit „Server mit Blockhaus automatisch starten“ läuft dein Minecraft-Server dann immer, wenn der Rechner an ist.</p>
+      </div>
+      <div class="wiz-toggles" style="margin:0">
+        <dl class="kv no-i18n" style="margin:0"><dt>${tr('Daten')}</dt><dd class="mono" style="font-size:12px;word-break:break-all">${esc(r.dataDir)}</dd>${inst.home ? `<dt>${tr('Programm')}</dt><dd class="mono" style="font-size:12px;word-break:break-all">${esc(inst.home)}</dd>` : ''}</dl>
+        <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn btn-sm" id="y-quit">${ico('logout')}Blockhaus beenden</button><button class="btn btn-sm btn-danger" id="y-uninst">${ico('trash')}Deinstallieren</button></div>
+      </div>
+    </div></div>`;
+  hydrateIcons(el);
+  const showUpd = (u) => {
+    const box = $('#y-upd-box', el), lab = $('#y-upd', el);
+    if (!u) return;
+    if (!u.available) { lab.innerHTML = `${ico('check')}${tr('Blockhaus ist aktuell')}`; box.innerHTML = ''; hydrateIcons(el); return; }
+    lab.innerHTML = `<b style="color:var(--gold)">${tr('Version {0} verfügbar', { 0: esc(u.version) })}</b>`;
+    box.innerHTML = `<div class="notice info" style="margin:10px 0 0">${ico('rocket')}<div><div class="no-i18n" style="white-space:pre-wrap;font-size:13px;max-height:140px;overflow:auto">${esc(u.notes || '').slice(0, 1500)}</div>
+      ${r.canUpdate ? `<button class="btn btn-primary btn-sm" id="y-install" style="margin-top:10px">${ico('download')}${tr('Jetzt installieren')}</button><small class="muted" style="display:block;margin-top:6px">${tr('Blockhaus startet dafür kurz neu. Der Minecraft-Server läuft weiter.')}</small>`
+        : `<a class="btn btn-sm" href="${esc(u.url)}" target="_blank" rel="noopener noreferrer" style="margin-top:10px">${ico('external')}${tr('Release ansehen')}</a>`}</div></div>`;
+    hydrateIcons(box);
+    const b = $('#y-install', box);
+    if (b) b.onclick = async () => { b.disabled = true; if (!await run(() => post('/api/system/update', {}), 'Update wird installiert – Blockhaus startet gleich neu')) b.disabled = false; };
+  };
+  $('#y-check', el).onclick = async () => { $('#y-upd', el).textContent = tr('Suche …'); try { showUpd(await api('/api/system/update?force=1')); } catch (e) { $('#y-upd', el).textContent = e.message; } };
+  if (r.update) showUpd(r.update); else api('/api/system/update').then(showUpd).catch(() => {});
+  $('#y-auto', el).onchange = async (e) => {
+    const x = await run(() => post('/api/system/autostart', { on: e.target.checked }), e.target.checked ? 'Startet ab jetzt mit dem Rechner' : 'Startet nicht mehr mit dem Rechner');
+    e.target.checked = x ? x.autostart : !e.target.checked;
+  };
+  $('#y-quit', el).onclick = async () => {
+    const res = await modal(`<h3>Blockhaus beenden?</h3><p>Das Panel ist dann nicht mehr erreichbar, bis du Blockhaus wieder startest.</p>
+      <label class="row" style="gap:10px"><input type="checkbox" name="stopServer" checked><span>Minecraft-Server ebenfalls stoppen</span></label>
+      <div class="btns"><button class="btn" data-close="x">Abbrechen</button><button class="btn btn-primary" data-close="ok">Beenden</button></div>`);
+    if (!res) return;
+    await run(() => post('/api/panel/quit', { stopServer: !!res.stopServer }));
+    document.body.innerHTML = `<div class="login"><div class="login-card"><h2>${tr('Blockhaus wurde beendet')}</h2><p class="muted">${tr('Du kannst dieses Fenster schließen.')}</p></div></div>`;
+  };
+  $('#y-uninst', el).onclick = async () => {
+    const res = await modal(`<h3>Blockhaus deinstallieren?</h3>
+      <p>Entfernt werden: Autostart, Einstellungen, Admin-Konten, das heruntergeladene Java${inst.installed ? ' und das Programm selbst' : ''}.</p>
+      <label class="row" style="gap:10px;align-items:flex-start"><input type="checkbox" name="keepWorlds" checked style="margin-top:3px"><span>Server mit Welt und Backups behalten<br><small class="muted">Sie werden in deinen Benutzerordner verschoben (Blockhaus-Sicherung-…). Ohne Haken wird alles endgültig gelöscht.</small></span></label>
+      <label class="field" style="margin-top:12px"><span>Zum Bestätigen „deinstallieren“ eintippen</span><input class="input" name="confirm" autocomplete="off"></label>
+      <div class="btns"><button class="btn" data-close="x">Abbrechen</button><button class="btn btn-danger" data-close="ok">Deinstallieren</button></div>`);
+    if (!res) return;
+    if (!await run(() => post('/api/system/uninstall', { keepWorlds: !!res.keepWorlds, confirm: res.confirm }))) return;
+    document.body.innerHTML = `<div class="login"><div class="login-card"><h2>${tr('Blockhaus wurde deinstalliert')}</h2><p class="muted">${res.keepWorlds ? tr('Deine Welt und die Backups liegen im Ordner „Blockhaus-Sicherung-…“ in deinem Benutzerordner.') : tr('Alle Daten wurden gelöscht.')}</p></div></div>`;
+  };
 }
 
 i18nInit().then(boot);

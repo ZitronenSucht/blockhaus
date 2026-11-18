@@ -171,6 +171,48 @@ class TestI18n(unittest.TestCase):
         self.assertEqual(app.tr_msg("Etwas ganz anderes", "en"), "Etwas ganz anderes")
 
 
+class TestUpdater(unittest.TestCase):
+    def test_apply_update_and_rollback_files(self):
+        import hashlib
+        import pathlib
+        from blockhaus import system
+        out = subprocess.run([sys.executable, os.path.join(ROOT, "packaging", "build.py"), "app"],
+                             capture_output=True, text=True, cwd=ROOT)
+        self.assertEqual(out.returncode, 0, out.stderr)
+        ver = __import__("re").search(r"blockhaus-app-(.+)\.zip", out.stdout).group(1)
+        zipf = os.path.join(ROOT, "dist", "blockhaus-app-%s.zip" % ver)
+        rel_dir = tempfile.mkdtemp()
+        target = "9.9.9"
+        app_name = system.APP_ASSET % target
+        data = open(zipf, "rb").read()
+        open(os.path.join(rel_dir, app_name), "wb").write(data)
+        open(os.path.join(rel_dir, "SHA256SUMS"), "w").write("%s  %s\n" % (hashlib.sha256(data).hexdigest(), app_name))
+        home = tempfile.mkdtemp()
+        os.makedirs(os.path.join(home, "app", "0.0.1", "blockhaus"))
+        open(os.path.join(home, "app", "current"), "w").write("0.0.1")
+        rel = {"version": target, "app": pathlib.Path(rel_dir, app_name).as_uri(),
+               "sums": pathlib.Path(rel_dir, "SHA256SUMS").as_uri()}
+        old = os.environ.get("BLOCKHAUS_HOME")
+        os.environ["BLOCKHAUS_HOME"] = home
+        try:
+            self.assertEqual(system.apply_update(rel), target)
+            self.assertEqual(system.current_app_version(), target)
+            self.assertTrue(os.path.isfile(os.path.join(home, "app", target, "blockhaus", "app.py")))
+            with open(os.path.join(home, "app", "previous")) as f:
+                self.assertEqual(f.read(), "0.0.1")
+            # manipulierte Datei wird abgelehnt
+            open(os.path.join(rel_dir, app_name), "ab").write(b"x")
+            with self.assertRaises(RuntimeError):
+                system.apply_update(dict(rel, version=target))
+        finally:
+            if old is None:
+                os.environ.pop("BLOCKHAUS_HOME", None)
+            else:
+                os.environ["BLOCKHAUS_HOME"] = old
+        self.assertGreater(system.ver_tuple("0.10.0"), system.ver_tuple("0.9.3"))
+        self.assertEqual(system.ver_tuple("v1.2"), (1, 2, 0))
+
+
 def free_port():
     s = socket.socket()
     s.bind(("127.0.0.1", 0))
