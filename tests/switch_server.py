@@ -122,12 +122,14 @@ def dump(title):
         if os.path.isfile(p):
             print("── %s ──" % rel)
             print(nbt_keys(p))
-    ddir = os.path.join(server, "world", "data")
+    print("── world (vollständig, ohne Regionsdateien) ──")
+    print(tree(os.path.join(server, "world"), 9))
+    ddir = os.path.join(server, "world")
     for d, _, files in os.walk(ddir):
         for f in files:
-            if f.endswith(".dat"):
+            if f.endswith(".dat") and f != "level.dat" and "players" not in d:
                 print("── %s ──" % os.path.relpath(os.path.join(d, f), server))
-                print(nbt_keys(os.path.join(d, f))[:3000])
+                print(nbt_keys(os.path.join(d, f))[:1500])
 
 
 ok = False
