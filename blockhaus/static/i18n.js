@@ -94,7 +94,8 @@ async function i18nInit(lang = i18nPreferred()) {
   document.documentElement.lang = lang;
   if (lang === 'de') { I18N.dict = null; return; }
   try {
-    const r = await fetch(`/i18n/${lang}.json`, { cache: 'no-cache' });
+    const v = (document.querySelector('meta[name="bh-version"]') || {}).content || '';
+    const r = await fetch(`/i18n/${lang}.json?v=${encodeURIComponent(v)}`, { cache: 'no-cache' });
     I18N.dict = await r.json();
   } catch { I18N.dict = null; return; }
   i18nCompile(I18N.dict);

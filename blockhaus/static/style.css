@@ -1058,3 +1058,13 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 .sys-paths { display: flex; flex-direction: column; gap: 10px; }
 .sys-paths small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
 .sys-paths code { display: block; font-family: var(--mono); font-size: 12px; color: var(--text-2); overflow-wrap: anywhere; word-break: break-all; }
+
+/* Hinweis auf neue Version */
+.upd-pop { position: fixed; z-index: 150; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  width: min(360px, calc(100vw - 32px)); background: var(--surface); border: 1px solid var(--line-2); border-left: 0; border-radius: 14px;
+  box-shadow: 0 18px 44px -12px rgba(0,0,0,.55); padding: 14px 14px 12px 16px; animation: rise .35s cubic-bezier(.2,.8,.2,1); }
+.upd-pop-h { display: flex; align-items: center; gap: 10px; }
+.upd-pop-h .ico { width: 18px; height: 18px; color: var(--accent); flex: none; }
+.upd-pop-h b { flex: 1; font-size: 14.5px; }
+.upd-pop p { margin: 6px 0 0 28px; color: var(--text-2); font-size: 13px; line-height: 1.45; }
+.upd-pop-b { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0 28px; }

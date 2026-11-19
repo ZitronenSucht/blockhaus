@@ -287,6 +287,7 @@ async function boot() {
   connect();
   route();
   loadMaint();
+  updateNotice();
   if (!S.maintTimer) S.maintTimer = setInterval(() => S.me && loadMaint(), 60000);
 }
 $('#maint-chip').onclick = () => toggleMaintenance();
@@ -323,7 +324,7 @@ function connect() {
   es.addEventListener('init', (e) => {
     const d = JSON.parse(e.data);
     // Nach einem Update läuft eine neue Blockhaus-Version: Seite neu laden, damit auch die Oberfläche neu ist
-    if (d.version && S.me && S.me.appVersion && d.version !== S.me.appVersion) { location.reload(); return; }
+    if (d.version && S.me && S.me.appVersion && d.version !== S.me.appVersion) { location.replace(`/?v=${encodeURIComponent(d.version)}${location.hash}`); return; }
     S.logs = d.logs; S.history = d.history; S.task = d.task;
     setStats(d.stats || {}, true);
     renderTask();
@@ -3825,6 +3826,35 @@ async function systemCard(el) {
     if (!res) return;
     if (!await run(() => post('/api/system/uninstall', { keepWorlds: !!res.keepWorlds, confirm: res.confirm }))) return;
     document.body.innerHTML = `<div class="login"><div class="login-card"><h2>${tr('Blockhaus wurde deinstalliert')}</h2><p class="muted">${res.keepWorlds ? tr('Deine Welt und die Backups liegen im Ordner „Blockhaus-Sicherung-…“ in deinem Benutzerordner.') : tr('Alle Daten wurden gelöscht.')}</p></div></div>`;
+  };
+}
+
+// Hinweis auf eine neue Blockhaus-Version (beim Öffnen; „Später“ gilt bis zum nächsten Start)
+async function updateNotice(delay = 1500) {
+  await new Promise((r) => setTimeout(r, delay));
+  let u;
+  try { u = await api('/api/system/update'); } catch { return; }
+  if (!u || !u.available || $('#upd-pop')) return;
+  try { if (sessionStorage.getItem('bh.updLater') === u.version) return; } catch { /* egal */ }
+  const first = String(u.notes || '').split('\n').map((l) => l.replace(/^[-*]\s*/, '').trim()).filter(Boolean)[0] || '';
+  const el = document.createElement('div');
+  el.id = 'upd-pop'; el.className = 'upd-pop'; el.setAttribute('role', 'status');
+  el.innerHTML = `<div class="upd-pop-h">${ico('rocket')}<b>${esc(tr('Blockhaus {0} ist verfügbar', { 0: u.version }))}</b>
+      <button class="icon-btn" data-u="later" aria-label="Später">${ico('x')}</button></div>
+    ${first ? `<p class="no-i18n">${esc(first)}</p>` : ''}
+    <div class="upd-pop-b">${u.canUpdate ? `<button class="btn btn-primary btn-sm" data-u="install">${ico('download')}Jetzt installieren</button>` : ''}
+      <a class="btn btn-sm" href="#/settings" data-u="details">Details</a><button class="btn btn-ghost btn-sm" data-u="later">Später</button></div>`;
+  document.body.append(el);
+  hydrateIcons(el);
+  el.onclick = async (e) => {
+    const b = e.target.closest('[data-u]');
+    if (!b) return;
+    if (b.dataset.u === 'later') { try { sessionStorage.setItem('bh.updLater', u.version); } catch { /* egal */ } el.remove(); }
+    else if (b.dataset.u === 'details') el.remove();
+    else if (b.dataset.u === 'install') {
+      b.disabled = true;
+      if (await run(() => post('/api/system/update', {}), 'Update wird installiert – Blockhaus startet gleich neu')) el.remove(); else b.disabled = false;
+    }
   };
 }
 

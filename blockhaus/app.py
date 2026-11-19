@@ -43,7 +43,7 @@ except ImportError:  # direkt als Skript gestartet
     import osutil
     import system
 
-VERSION = "0.1.2"
+VERSION = "0.1.3"
 BASE = osutil.resource_dir(__file__)
 STATIC = os.path.join(BASE, "static")
 DATA = osutil.app_data_dir()
@@ -1640,6 +1640,13 @@ class Handler(BaseHTTPRequestHandler):
         ctype = mimetypes.guess_type(p)[0] or "application/octet-stream"
         if ctype.startswith("text/") or ctype in ("application/javascript", "image/svg+xml"):
             ctype += "; charset=utf-8"
+        if path == "/index.html":
+            # Dateien mit Version in der Adresse: nach einem Update lädt der Browser (auch das macOS-Fenster)
+            # garantiert die neuen statt der zwischengespeicherten. Die Startseite selbst nie zwischenspeichern.
+            body = re.sub(rb'(href|src)="/(style\.css|app\.js|i18n\.js|favicon\.svg)"',
+                          lambda m: b'%s="/%s?v=%s"' % (m.group(1), m.group(2), VERSION.encode()), body)
+            body = body.replace(b"<head>", b'<head>\n<meta name="bh-version" content="%s">' % VERSION.encode(), 1)
+            return self.send_body(200, body, ctype, {"Cache-Control": "no-store"})
         self.send_body(200, body, ctype, {"Cache-Control": "no-cache"})
 
     # ── Login ──
@@ -5774,7 +5781,21 @@ def r_system_update_check(h, s, q):
         except Exception as e:
             raise ApiError("Update-Prüfung nicht möglich: %s" % e, 502)
         _update["checked"] = now()
-    h.json(_update["info"])
+    h.json(dict(_update["info"], canUpdate=bool(system.home())))
+
+
+def update_check_loop():
+    """Kurz nach dem Start und dann alle 6 Stunden nach einer neuen Blockhaus-Version schauen."""
+    time.sleep(20)
+    while True:
+        try:
+            _update["info"] = system.check_update(VERSION)
+            _update["checked"] = now()
+            if _update["info"].get("available"):
+                print("Neue Blockhaus-Version verfügbar: %s" % _update["info"]["version"], file=sys.stderr)
+        except Exception as e:
+            print("Update-Prüfung nicht möglich:", e, file=sys.stderr)
+        time.sleep(6 * 3600)
 
 
 @api("POST", "/api/system/update")
@@ -5977,7 +5998,7 @@ def main():
     if has_server and ensure_rcon():
         print("RCON in server.properties aktiviert – wirkt nach dem nächsten Server-Neustart", file=sys.stderr)
     ensure_launch_conf()
-    for target in (log_tailer, Sampler().run, auto_backup_loop, sched_loop):
+    for target in (log_tailer, Sampler().run, auto_backup_loop, sched_loop, update_check_loop):
         threading.Thread(target=target, daemon=True).start()
     if not use_systemd():
         p = server_proc()  # übernimmt einen noch laufenden Server

@@ -126,7 +126,9 @@ class TestOsutil(unittest.TestCase):
         self.assertTrue(wait(lambda: "Done" in read()))
         self.assertTrue(p.command("say hi"))
         self.assertTrue(wait(lambda: "console: say hi" in read()))
+        t0 = time.monotonic()
         p.stop(timeout=20)
+        self.assertLess(time.monotonic() - t0, 8, "Stoppen dauerte zu lange (Zombie-Prozess nicht erkannt?)")
         self.assertEqual(p.info()["ActiveState"], "inactive")
         self.assertIn("Stopping server", read())
         # Absturz → automatischer Neustart nach ~10 s

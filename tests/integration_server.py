@@ -96,6 +96,20 @@ try:
     flips = [s for t, s in seq if online_since and t > online_since]
     log("Statuswechsel nach dem ersten Online:", flips or "keine")
     ok = online_since is not None and not flips
+    # Stoppen über die API: muss zügig gehen (unter macOS hing es früher 90 s an einem Zombie-Prozess)
+    t0 = time.time()
+    call("/api/server", {"action": "stop"})
+    stopped = None
+    while time.time() - t0 < 120:
+        line = stream.readline().decode("utf-8", "replace").strip()
+        if line.startswith("event:"):
+            event = line[6:].strip()
+        elif line.startswith("data:") and event == "stats":
+            if json.loads(line[5:]).get("state") == "inactive":
+                stopped = time.time() - t0
+                break
+    log("Server gestoppt nach:", "%.1f s" % stopped if stopped else "– (nicht gestoppt)")
+    ok = ok and stopped is not None and stopped < 45
 finally:
     proc.terminate()
     try:

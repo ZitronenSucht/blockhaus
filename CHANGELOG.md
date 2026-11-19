@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.3
+
+- Neu: Beim Öffnen von Blockhaus erscheint ein Hinweis, wenn eine neue Version verfügbar ist – mit „Jetzt installieren“
+- Behoben: Unter macOS hing das Stoppen des Servers bis zu 90 Sekunden in „Stoppt …“ (auch Neustarts dauerten dadurch so lange)
+- Behoben: Nach einem Update zeigte das Fenster unter macOS teils noch die alte Oberfläche, bis man es neu öffnete
+- Updates funktionieren jetzt auch, wenn das Abfrage-Limit von GitHub erreicht ist
+- New: update notice when opening Blockhaus; fixed slow server stop on macOS and stale UI after updates
+
 ## 0.1.2
 
 - Neue Status-Animation: Der Blockhaus-Block setzt sich beim Start zusammen und macht das Licht an, schwebt online und fällt beim Stoppen auseinander – ohne Minecraft-Texturen, sieht also sofort nach der Installation richtig aus

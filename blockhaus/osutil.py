@@ -417,6 +417,15 @@ class ServerProcess:
         except OSError:
             return False
 
+    def _alive(self, pid):
+        """Läuft der Prozess noch? Beim eigenen Kindprozess über poll() – das holt einen beendeten Prozess
+        („Zombie“) auch ab. Ein reines kill(pid, 0) meldet unter macOS Zombies weiter als lebendig."""
+        with self.lock:
+            proc = self.proc
+        if proc is not None and proc.pid == pid:
+            return proc.poll() is None
+        return pid_alive(pid)
+
     def stop(self, timeout=90):
         with self.lock:
             if not self.pid:
@@ -429,9 +438,9 @@ class ServerProcess:
             if not (self.send_stop and self.send_stop()):
                 kill_pid(pid)  # SIGTERM: Minecraft speichert und beendet sich sauber
         end = time.monotonic() + timeout
-        while time.monotonic() < end and pid_alive(pid):
-            time.sleep(0.5)
-        if pid_alive(pid):
+        while time.monotonic() < end and self._alive(pid):
+            time.sleep(0.3)
+        if self._alive(pid):
             self.on_event("err", "Server reagiert nicht – wird hart beendet")
             kill_pid(pid, hard=True)
             time.sleep(1)
@@ -446,7 +455,9 @@ class ServerProcess:
             pid, self.stopping = self.pid, True
         if pid:
             kill_pid(pid, hard=True)
-            time.sleep(0.5)
+            end = time.monotonic() + 5
+            while time.monotonic() < end and self._alive(pid):
+                time.sleep(0.1)
         self._exited(-9)
 
     def _exited(self, code):
