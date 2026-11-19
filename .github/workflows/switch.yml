@@ -1,0 +1,30 @@
+name: Software-Wechsel (echte Welt)
+
+# Erstellt eine Welt mit einer Server-Software, wechselt über Blockhaus zu einer anderen und prüft,
+# ob der Server mit derselben Welt wieder online kommt.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ["blockhaus/**", "tests/switch_server.py", ".github/workflows/switch.yml"]
+
+jobs:
+  switch:
+    name: ${{ matrix.from }} → ${{ matrix.to }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { from: paper, to: fabric }
+          - { from: paper, to: vanilla }
+          - { from: vanilla, to: fabric }
+          - { from: fabric, to: paper }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Wechsel testen
+        run: python tests/switch_server.py ${{ matrix.from }} ${{ matrix.to }}
