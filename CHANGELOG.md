@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.4
+
+- Behoben: Symbole in Knöpfen innerhalb von Hinweisen (z. B. „Jetzt installieren“) waren kaum zu erkennen
+- Fixed: icons on buttons inside notices (e.g. “Install now”) were barely visible
+
 ## 0.1.3
 
 - Neu: Beim Öffnen von Blockhaus erscheint ein Hinweis, wenn eine neue Version verfügbar ist – mit „Jetzt installieren“

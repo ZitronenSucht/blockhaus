@@ -97,7 +97,7 @@ a { color: var(--accent); }
 @keyframes rise { from { opacity: 0; transform: translateY(8px); } }
 
 /* ───── Layout ───── */
-.app { position: relative; z-index: 1; display: grid; grid-template-columns: 248px 1fr; min-height: 100vh; }
+.app { position: relative; z-index: 1; display: grid; grid-template-columns: 248px minmax(0, 1fr); min-height: 100vh; }
 .rail {
   position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column;
   padding: 18px 12px; border-right: 1px solid var(--line); background: color-mix(in srgb, var(--bg-2) 80%, transparent);
@@ -888,9 +888,9 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 .seg button:hover { color: var(--text); }
 .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: 0 1px 0 rgba(255,255,255,.04) inset; }
 .notice { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 11px; background: var(--gold-soft); color: var(--text); border: 1px solid color-mix(in srgb, var(--gold) 25%, transparent); margin-bottom: 16px; font-size: 13.5px; }
-.notice .ico { color: var(--gold); margin-top: 1px; }
+.notice > .ico { color: var(--gold); margin-top: 1px; }  /* nur das Symbol des Hinweises, nicht die in Knöpfen */
 .notice.info { background: color-mix(in srgb, var(--aqua) 9%, transparent); border-color: color-mix(in srgb, var(--aqua) 25%, transparent); }
-.notice.info .ico { color: var(--aqua); }
+.notice.info > .ico { color: var(--aqua); }
 .bar { height: 6px; border-radius: 99px; background: var(--surface-3); overflow: hidden; }
 .bar i { display: block; height: 100%; border-radius: inherit; background: var(--accent); transition: width .5s; }
 .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; font-size: 13px; }

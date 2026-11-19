@@ -43,7 +43,7 @@ except ImportError:  # direkt als Skript gestartet
     import osutil
     import system
 
-VERSION = "0.1.3"
+VERSION = "0.1.4"
 BASE = osutil.resource_dir(__file__)
 STATIC = os.path.join(BASE, "static")
 DATA = osutil.app_data_dir()
