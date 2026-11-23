@@ -45,6 +45,7 @@ jobs:
           npm init -y > /dev/null
           npm install --silent jsdom@25.0.1
           node i18n.test.mjs
+          node toasts.test.mjs
 
   package:
     name: Paket ${{ matrix.os }}
