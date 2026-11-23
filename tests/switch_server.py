@@ -114,6 +114,19 @@ def nbt_keys(path):
     return "\n".join(show(root))
 
 
+def seed_of():
+    """Seed der Welt: aus world/data (Vanilla) oder der Oberwelt (Paper)."""
+    from blockhaus import nbt
+    for rel in ("world/data/minecraft/world_gen_settings.dat",
+                "world/dimensions/minecraft/overworld/data/minecraft/world_gen_settings.dat"):
+        p = os.path.join(server, rel)
+        if os.path.isfile(p):
+            v = nbt.get(nbt.load(p)[1], "data", "seed")
+            if v:
+                return v[1]
+    return None
+
+
 def dump(title):
     print("\n════ %s ════" % title)
     print(tree(server, 3))
@@ -157,6 +170,8 @@ try:
     call("/api/server", {"action": "stop"})
     wait_state(False)
     dump("Welt nach %s" % SRC)
+    seed_before = seed_of()
+    log("Seed vorher:", seed_before)
     lv2 = call("/api/update/builds?loader=%s&mc=%s" % (DST, mc)).get("recommended") or ""
     chk = call("/api/update/check", {"loader": DST, "mc": mc, "loaderVersion": lv2}, timeout=300)
     log("Prüfung:", chk["mode"], [(m["name"], m["status"]) for m in chk["mods"]], chk["warnings"][:2])
@@ -164,6 +179,12 @@ try:
     call("/api/update/run", {"loader": DST, "mc": mc, "loaderVersion": lv2})
     ok = wait_state(True, 900)
     log("%s online nach dem Wechsel:" % DST, ok)
+    time.sleep(5)
+    call("/api/server", {"action": "stop"})
+    wait_state(False)
+    seed_after = seed_of()
+    log("Seed nachher:", seed_after, "– gleich" if seed_after == seed_before else "– ANDERS!")
+    ok = ok and seed_before is not None and seed_after == seed_before
     dump("Welt nach dem Wechsel zu %s" % DST)
 finally:
     proc.terminate()

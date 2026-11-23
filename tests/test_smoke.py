@@ -223,6 +223,50 @@ class TestRcon(unittest.TestCase):
         os.remove(os.path.join(sdir, "server.properties"))
 
 
+class TestWorldConvert(unittest.TestCase):
+    """Paper legt Seed, Spielregeln usw. pro Dimension ab, Vanilla/Fabric einmal pro Welt."""
+
+    def test_paper_to_fabric_and_back(self):
+        from blockhaus import app, nbt
+        sdir = app.CONF["server_dir"]
+        w = os.path.join(sdir, "world")
+        over = os.path.join(w, "dimensions", "minecraft", "overworld", "data", "minecraft")
+        os.makedirs(over, exist_ok=True)
+        with open(os.path.join(sdir, "server.properties"), "w") as f:
+            f.write("level-name=world\n")
+        gen = (nbt.COMPOUND, {"DataVersion": (nbt.INT, 5023), "data": (nbt.COMPOUND, {
+            "seed": (nbt.LONG, -4242424242), "generate_structures": (nbt.BYTE, 1)})})
+        nbt.save(os.path.join(over, "world_gen_settings.dat"), gen)
+        nbt.save(os.path.join(over, "game_rules.dat"), (nbt.COMPOUND, {"data": (nbt.COMPOUND, {})}))
+        level = (nbt.COMPOUND, {"Data": (nbt.COMPOUND, {"DataPacks": (nbt.COMPOUND, {
+            "Enabled": (nbt.LIST, (nbt.STRING, ["vanilla", "paper"])),
+            "Disabled": (nbt.LIST, (nbt.STRING, []))}), "LevelName": (nbt.STRING, "world")})})
+        nbt.save(os.path.join(w, "level.dat"), level)
+        report = app.convert_world("paper", "fabric")
+        self.assertTrue(report)
+        seed = nbt.get(nbt.load(os.path.join(w, "data", "minecraft", "world_gen_settings.dat"))[1], "data", "seed")
+        self.assertEqual(seed[1], -4242424242)
+        self.assertTrue(os.path.isfile(os.path.join(w, "data", "minecraft", "game_rules.dat")))
+        enabled = nbt.get(nbt.load(os.path.join(w, "level.dat"))[1], "Data", "DataPacks", "Enabled")
+        self.assertEqual(enabled[1][1], ["vanilla"])
+        self.assertTrue(os.path.isfile(os.path.join(over, "world_gen_settings.dat")), "Paper-Datei bleibt")
+        # zurück zu Paper: alte Paper-Kopien werden beiseitegelegt
+        app.convert_world("fabric", "paper")
+        self.assertFalse(os.path.isfile(os.path.join(over, "world_gen_settings.dat")))
+        self.assertTrue(os.path.isfile(os.path.join(over, "world_gen_settings.dat.blockhaus-alt")))
+        # zweimal hintereinander ändert nichts mehr
+        self.assertEqual(app.convert_world("fabric", "paper"), [])
+        import shutil
+        shutil.rmtree(w)
+        os.remove(os.path.join(sdir, "server.properties"))
+
+    def test_nbt_roundtrip(self):
+        from blockhaus import nbt
+        root = (nbt.COMPOUND, {"a": (nbt.LIST, (nbt.COMPOUND, [{"x": (nbt.DOUBLE, 1.5)}])), "b": (nbt.LONGS, [1, -2]),
+                               "c": (nbt.BYTES, [1, -1]), "d": (nbt.STRING, "ä€"), "e": (nbt.LIST, (nbt.END, []))})
+        self.assertEqual(nbt.loads(nbt.dumps(root, "n")), ("n", root))
+
+
 class TestUpdater(unittest.TestCase):
     def test_apply_update_and_rollback_files(self):
         import hashlib

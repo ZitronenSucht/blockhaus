@@ -38,8 +38,9 @@ from zoneinfo import ZoneInfo
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 try:
-    from . import osutil, system
+    from . import nbt, osutil, system
 except ImportError:  # direkt als Skript gestartet
+    import nbt
     import osutil
     import system
 
@@ -4254,6 +4255,54 @@ def migrate_content(cur_ld, ld, mc, plan):
     return report
 
 
+# Welt-Dateien, die Vanilla/Fabric/Forge einmal pro Welt (world/data/minecraft) erwarten,
+# Paper/Purpur aber pro Dimension (world/dimensions/minecraft/<dim>/data/minecraft) ablegen.
+WORLD_LEVEL_DATA = ("world_gen_settings.dat", "game_rules.dat", "weather.dat", "scheduled_events.dat")
+BUKKIT_DATAPACKS = ("paper", "bukkit", "purpur")
+
+
+def convert_world(cur_ld, ld):
+    """Welt beim Wechsel zwischen Paper/Purpur und den übrigen Server-Arten anpassen (Seed bleibt erhalten)."""
+    level = read_props().get("level-name", "world")
+    wdir = srv(level)
+    if not os.path.isdir(wdir):
+        return []
+    out = []
+    data = os.path.join(wdir, "data", "minecraft")
+    dims = os.path.join(wdir, "dimensions", "minecraft")
+    to_bukkit = LOADERS[ld]["family"] == "bukkit"
+    if LOADERS[cur_ld]["family"] == "bukkit" and not to_bukkit:
+        over = os.path.join(dims, "overworld", "data", "minecraft")
+        for f in WORLD_LEVEL_DATA:
+            src, dst = os.path.join(over, f), os.path.join(data, f)
+            if os.path.isfile(src) and not os.path.isfile(dst):
+                os.makedirs(data, exist_ok=True)
+                shutil.copy2(src, dst)
+                out.append("Welt: %s für %s übernommen" % (f, LOADERS[ld]["name"]))
+        lp = os.path.join(wdir, "level.dat")
+        try:
+            name, root = nbt.load(lp)
+            dp = nbt.get(root, "Data", "DataPacks", "Enabled")
+            if dp:
+                keep = [x for x in dp[1][1] if x not in BUKKIT_DATAPACKS]
+                if len(keep) != len(dp[1][1]):
+                    root[1]["Data"][1]["DataPacks"][1]["Enabled"] = (nbt.LIST, (nbt.STRING, keep))
+                    shutil.copy2(lp, lp + ".vor-wechsel")
+                    nbt.save(lp, root, name)
+                    out.append("Welt: Paper-Datapack aus level.dat entfernt")
+        except (OSError, ValueError, KeyError, IndexError) as e:
+            out.append("Welt: level.dat nicht angepasst (%s)" % e)
+    elif to_bukkit and LOADERS[cur_ld]["family"] != "bukkit" and os.path.isdir(dims):
+        # Alte Paper-Kopien pro Dimension beiseitelegen, damit Paper die aktuellen Welt-Daten neu übernimmt
+        for dim in os.listdir(dims):
+            for f in WORLD_LEVEL_DATA:
+                p = os.path.join(dims, dim, "data", "minecraft", f)
+                if os.path.isfile(p) and os.path.isfile(os.path.join(data, f)):
+                    os.replace(p, p + ".blockhaus-alt")
+                    out.append("Welt: veraltete Paper-Kopie %s/%s beiseitegelegt" % (dim, f))
+    return out
+
+
 def unsplit_dimensions():
     """Paper/Purpur können Nether und Ende in eigene Ordner (world_nether, world_the_end) auslagern. Beim Wechsel
     zu Vanilla/Fabric/Forge zurück in die Hauptwelt verschieben – nur, wenn dort an der Stelle noch nichts liegt."""
@@ -4504,6 +4553,7 @@ def run_upgrade(ld, mc, lv, user):
         report = migrate_content(cur_ld, ld, mc, plan)
         if LOADERS[cur_ld]["family"] == "bukkit" and L["family"] != "bukkit":
             report += unsplit_dimensions()
+        report += convert_world(cur_ld, ld)
         write_launch_conf(ld, mc, lv, launch)
         CONF["mc_version"], CONF["loader_version"] = mc, lv
         save_json(CONF_PATH, CONF)
