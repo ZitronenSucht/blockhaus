@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.6
+
+- Neu: Startanimation beim Öffnen von Blockhaus – der Umriss des Blocks zeichnet sich, füllt sich mit Farbe und macht Licht an (einmal pro Sitzung, nicht bei „Bewegung reduzieren“)
+- New: startup animation when opening Blockhaus
+
 ## 0.1.5
 
 - Behoben: Der Wechsel von Paper/Purpur zu Fabric, Forge, NeoForge oder Vanilla scheiterte („Failed to load datapacks“). Blockhaus übernimmt jetzt Seed, Spielregeln und Wetter in das Format der neuen Software und entfernt das Paper-Datapack – die Welt bleibt dieselbe

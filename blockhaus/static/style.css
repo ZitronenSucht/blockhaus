@@ -1068,3 +1068,30 @@ body[data-page="overview"] .status-pill { display: none; }  /* steht dort schon 
 .upd-pop-h b { flex: 1; font-size: 14.5px; }
 .upd-pop p { margin: 6px 0 0 28px; color: var(--text-2); font-size: 13px; line-height: 1.45; }
 .upd-pop-b { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 0 28px; }
+
+/* ───── Startanimation „Bauplan“: Umriss zeichnet sich, füllt sich mit Farbe, Licht an, Name, Ladebalken ───── */
+.splash { position: fixed; inset: 0; z-index: 500; display: grid; place-items: center; background: var(--bg); transition: opacity .4s ease, visibility .4s; }
+.splash.done { opacity: 0; visibility: hidden; }
+.splash-in { display: flex; flex-direction: column; align-items: center; gap: 16px; }
+.splash-logo { width: 112px; height: 112px; overflow: visible; }
+.splash-logo * { transform-box: fill-box; transform-origin: center; }
+.splash .outline path { fill: none; stroke: #7fe0a8; stroke-width: 1.6; stroke-linejoin: round; stroke-dasharray: 260; stroke-dashoffset: 260; animation: sp-draw 1s ease-in-out forwards; }
+.splash .outline path:nth-child(2) { animation-delay: .25s; } .splash .outline path:nth-child(3) { animation-delay: .45s; }
+.splash .outline { animation: sp-hide .4s 1.6s forwards; }
+.splash .fill path { opacity: 0; }
+.splash .fill .t { fill: #7fe0a8; animation: sp-show .5s 1.15s forwards; }
+.splash .fill .l { fill: #3bb273; animation: sp-show .5s 1.3s forwards; }
+.splash .fill .r { fill: #1f7a4d; animation: sp-show .5s 1.45s forwards; }
+.splash .fill .lt { fill: #2b332f; }
+.splash .fill .lt.d { animation: sp-show .1s 1.7s forwards, sp-lit .5s 1.7s both; }
+.splash .fill .lt.w { animation: sp-show .1s 1.85s forwards, sp-lit .5s 1.85s both; }
+.splash-word { display: flex; font-family: "Space Grotesk", var(--sans); font-weight: 700; font-size: 34px; letter-spacing: -.01em; color: var(--text); }
+.splash-word span { opacity: 0; animation: sp-show .01s forwards; animation-delay: calc(1.9s + var(--i) * 70ms); }
+.splash-prog { width: 150px; height: 3px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+.splash-prog i { display: block; height: 100%; width: 0; background: var(--accent); animation: sp-load 1.6s 1.2s cubic-bezier(.4, 0, .2, 1) forwards; }
+.splash-sub { color: var(--muted); font-size: 13px; opacity: 0; animation: sp-show .4s 1.2s forwards; }
+@keyframes sp-draw { to { stroke-dashoffset: 0; } }
+@keyframes sp-show { to { opacity: 1; } }
+@keyframes sp-hide { to { opacity: 0; } }
+@keyframes sp-lit { 0% { fill: #2b332f; } 40% { fill: #ffd27a; } 55% { fill: #2b332f; } 100% { fill: #ffd27a; filter: drop-shadow(0 0 3px #ffcf6e); } }
+@keyframes sp-load { 0% { width: 0; } 60% { width: 72%; } 100% { width: 100%; } }

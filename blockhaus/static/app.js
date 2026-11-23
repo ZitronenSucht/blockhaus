@@ -253,6 +253,7 @@ async function showLogin() {
   $('#setup').hidden = true;
   $('#login-lang').value = I18N.lang;
   $('#app').hidden = true; $('#login').hidden = false;
+  hideSplash();
   $('#palette').hidden = true; $('#modal').hidden = true;
   setTimeout(() => $('#login-form [name=user]').focus(), 50);
 }
@@ -288,6 +289,7 @@ async function boot() {
   route();
   loadMaint();
   updateNotice();
+  hideSplash();
   if (!S.maintTimer) S.maintTimer = setInterval(() => S.me && loadMaint(), 60000);
 }
 $('#maint-chip').onclick = () => toggleMaintenance();
@@ -3323,6 +3325,7 @@ function showSetup(st) {
   $('#app').hidden = true; $('#login').hidden = true;
   const box = $('#setup');
   box.hidden = false;
+  hideSplash();
   box.innerHTML = `<form class="login-card setup-card" id="setup-form" autocomplete="off">
     <div class="brand brand-lg">${LOGO}<div><b>Blockhaus</b><small>Version ${esc(st.version)} · ${esc(st.os)}</small></div></div>
     <h2 class="setup-h">Willkommen!</h2>
@@ -3868,4 +3871,12 @@ async function updateNotice(delay = 1500) {
   };
 }
 
+// Startanimation ausblenden, sobald die erste Ansicht steht – frühestens nach einem Durchlauf (~2,6 s)
+function hideSplash() {
+  const sp = document.getElementById('splash');
+  if (!sp || sp.dataset.closing) return;
+  sp.dataset.closing = '1';
+  setTimeout(() => { sp.classList.add('done'); setTimeout(() => sp.remove(), 450); }, Math.max(0, 2600 - performance.now()));
+}
+setTimeout(hideSplash, 8000);  // spätestens dann, auch wenn etwas hängt
 i18nInit().then(boot);

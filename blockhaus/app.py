@@ -44,7 +44,7 @@ except ImportError:  # direkt als Skript gestartet
     import osutil
     import system
 
-VERSION = "0.1.5"
+VERSION = "0.1.6"
 BASE = osutil.resource_dir(__file__)
 STATIC = os.path.join(BASE, "static")
 DATA = osutil.app_data_dir()
@@ -1683,7 +1683,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/index.html":
             # Dateien mit Version in der Adresse: nach einem Update lädt der Browser (auch das macOS-Fenster)
             # garantiert die neuen statt der zwischengespeicherten. Die Startseite selbst nie zwischenspeichern.
-            body = re.sub(rb'(href|src)="/(style\.css|app\.js|i18n\.js|favicon\.svg)"',
+            body = re.sub(rb'(href|src)="/(style\.css|app\.js|i18n\.js|splash\.js|favicon\.svg)"',
                           lambda m: b'%s="/%s?v=%s"' % (m.group(1), m.group(2), VERSION.encode()), body)
             body = body.replace(b"<head>", b'<head>\n<meta name="bh-version" content="%s">' % VERSION.encode(), 1)
             return self.send_body(200, body, ctype, {"Cache-Control": "no-store"})
