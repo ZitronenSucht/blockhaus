@@ -3784,6 +3784,8 @@ async function systemCard(el) {
         ${inst.installed ? '' : '<p class="muted" style="font-size:12.5px;margin:10px 0 0">Aus dem Quellcode gestartet – Updates kommen hier über git.</p>'}
         <label class="sys-toggle"><span class="switch"><input type="checkbox" id="y-auto" ${r.autostart ? 'checked' : ''}><span></span></span><span>Blockhaus beim Start des Rechners im Hintergrund starten<br><small class="muted">${esc({ Windows: 'beim Anmelden bei Windows', macOS: 'beim Anmelden am Mac', Linux: 'beim Hochfahren (systemd-Benutzerdienst)' }[r.os] || '')}</small></span></label>
         <p class="muted" style="font-size:12.5px;margin:8px 0 0">Zusammen mit „Server mit Blockhaus automatisch starten“ läuft dein Minecraft-Server dann immer, wenn der Rechner an ist.</p>
+        <label class="sys-toggle"><span class="switch"><input type="checkbox" id="y-notify" ${r.notify ? 'checked' : ''}><span></span></span><span>Mitteilung des Systems, wenn Spieler joinen oder gehen<br><small class="muted">Erscheint auch, wenn das Blockhaus-Fenster geschlossen ist oder du gerade spielst.</small></span></label>
+        <button class="btn btn-sm btn-ghost" id="y-notify-test" style="margin:8px 0 0 52px">${ico('chat')}Test-Mitteilung</button>
       </section>
       <section>
         <div class="sys-paths"><div><small>${tr('Daten')}</small><code class="no-i18n">${esc(r.dataDir)}</code></div>${inst.home ? `<div><small>${tr('Programm')}</small><code class="no-i18n">${esc(inst.home)}</code></div>` : ''}</div>
@@ -3805,6 +3807,14 @@ async function systemCard(el) {
   };
   $('#y-check', el).onclick = async () => { $('#y-upd', el).textContent = tr('Suche …'); try { showUpd(await api('/api/system/update?force=1')); } catch (e) { $('#y-upd', el).textContent = e.message; } };
   if (r.update) showUpd(r.update); else api('/api/system/update').then(showUpd).catch(() => {});
+  $('#y-notify', el).onchange = async (e) => {
+    if (!await run(() => post('/api/panel/settings', { notify_system: e.target.checked }), e.target.checked ? 'Mitteilungen an' : 'Mitteilungen aus')) e.target.checked = !e.target.checked;
+  };
+  $('#y-notify-test', el).onclick = async () => {
+    mcToast('join', S.me.user, tr('Spieler beigetreten'), tr('So sehen die Meldungen im Fenster aus'));
+    const x = await run(() => post('/api/system/notify-test', {}));
+    if (x && !x.ok) toast(tr('Auf diesem System gibt es keine Systemmitteilungen (unter Linux: notify-send fehlt)'), 'err');
+  };
   $('#y-auto', el).onchange = async (e) => {
     const x = await run(() => post('/api/system/autostart', { on: e.target.checked }), e.target.checked ? 'Startet ab jetzt mit dem Rechner' : 'Startet nicht mehr mit dem Rechner');
     e.target.checked = x ? x.autostart : !e.target.checked;

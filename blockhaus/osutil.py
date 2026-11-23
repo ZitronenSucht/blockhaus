@@ -669,3 +669,43 @@ def extract_archive(path, dest):
 
 def disk_usage(path):
     return shutil.disk_usage(path)
+
+
+# ───────────────────────── Systemmitteilungen ─────────────────────────
+
+_WIN_TOAST = r"""
+[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+$x = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+$t = $x.GetElementsByTagName('text')
+$t.Item(0).AppendChild($x.CreateTextNode($env:BH_TITLE)) > $null
+$t.Item(1).AppendChild($x.CreateTextNode($env:BH_TEXT)) > $null
+$id = '{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe'
+[Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($id).Show([Windows.UI.Notifications.ToastNotification]::new($x))
+"""
+
+
+def notify(title, text):
+    """Mitteilung des Betriebssystems anzeigen (macOS-Mitteilungszentrale, Windows-Benachrichtigung, Linux
+    notify-send). Texte werden nie in Befehle eingesetzt, sondern als Argument bzw. Umgebungsvariable übergeben.
+    Gibt False zurück, wenn es auf diesem System keinen Weg gibt."""
+    title, text = str(title)[:120], str(text)[:240]
+    try:
+        if IS_MAC:
+            script = ('on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)'
+                      ' sound name "Pop"\nend run')
+            subprocess.Popen(["osascript", "-e", script, title, text], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            return True
+        if IS_WIN:
+            env = dict(os.environ, BH_TITLE=title, BH_TEXT=text)
+            subprocess.Popen(["powershell", "-NoProfile", "-NonInteractive", "-Command", _WIN_TOAST], env=env,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **_no_window())
+            return True
+        exe = shutil.which("notify-send")
+        if exe:
+            subprocess.Popen([exe, "--app-name=Blockhaus", title, text], stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL)
+            return True
+    except OSError:
+        pass
+    return False

@@ -267,6 +267,36 @@ class TestWorldConvert(unittest.TestCase):
         self.assertEqual(nbt.loads(nbt.dumps(root, "n")), ("n", root))
 
 
+class TestNotify(unittest.TestCase):
+    def test_join_leave(self):
+        from blockhaus import app, osutil
+        sent = []
+        orig = osutil.notify
+        osutil.notify = lambda t, x: sent.append((t, x)) or True
+        try:
+            app.CONF["notify_system"] = True
+            app.CONF["language"] = "de"
+            hms = time.strftime("%H:%M:%S")
+            app.notify_player_event("[%s] [Server thread/INFO]: Steve joined the game" % hms)
+            app.notify_player_event("[%s] [Server thread/INFO]: Steve joined the game" % hms)  # doppelt
+            old = time.strftime("%H:%M:%S", time.localtime(time.time() - 3600))
+            app.notify_player_event("[%s] [Server thread/INFO]: Alex left the game" % old)  # altes Log
+            app.notify_player_event("[%s] [Server thread/INFO]: <Steve> joined the game" % hms)  # Chat, kein Join
+            self.assertEqual(sent, [("Spieler beigetreten", "Steve ist jetzt auf dem Server")])
+            app.CONF["language"] = "en"
+            app.notify_player_event("[%s] [Server thread/INFO]: Alex left the game" % hms)
+            self.assertEqual(sent[-1], ("Player left", "Alex left the server"))
+            app.CONF["notify_system"] = False
+            app.notify_player_event("[%s] [Server thread/INFO]: Bob joined the game" % hms)
+            self.assertEqual(len(sent), 2)
+        finally:
+            osutil.notify = orig
+            app.CONF["language"] = "de"
+            app.CONF.pop("notify_system", None)
+        if sys.platform in ("darwin", "win32"):  # echter Aufruf darf nicht abstürzen
+            self.assertTrue(osutil.notify("Blockhaus-Test", "CI"))
+
+
 class TestUpdater(unittest.TestCase):
     def test_apply_update_and_rollback_files(self):
         import hashlib

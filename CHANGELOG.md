@@ -3,7 +3,9 @@
 ## 0.1.5
 
 - Behoben: Der Wechsel von Paper/Purpur zu Fabric, Forge, NeoForge oder Vanilla scheiterte („Failed to load datapacks“). Blockhaus übernimmt jetzt Seed, Spielregeln und Wetter in das Format der neuen Software und entfernt das Paper-Datapack – die Welt bleibt dieselbe
+- Neu: Mitteilung des Systems (macOS-Mitteilungszentrale, Windows, Linux), wenn Spieler joinen oder gehen – auch wenn das Fenster geschlossen ist. Ein-/ausschaltbar unter Einstellungen → Blockhaus, mit „Test-Mitteilung“
 - Fixed: switching from Paper/Purpur to Fabric, Forge, NeoForge or Vanilla failed; the world (including its seed) is now carried over
+- New: system notifications when players join or leave
 
 ## 0.1.4
 

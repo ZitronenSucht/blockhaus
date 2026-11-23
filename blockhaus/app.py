@@ -177,6 +177,39 @@ TR_PREFIXES = (("Update: ", "Update: "), ("Einrichtung: ", "Setup: "))
 _tl = threading.local()
 
 
+_notify_last = {}
+_JOIN_RE = re.compile(r"\]: ([A-Za-z0-9_]{1,16}) (joined|left) the game$")
+
+
+def notify_enabled():
+    v = CONF.get("notify_system")
+    if v is None:  # Standard: in der Desktop-App an, als Server-Dienst aus
+        return system.install_info().get("mode") == "gui"
+    return bool(v)
+
+
+def notify_player_event(line):
+    """Systemmitteilung, wenn ein Spieler den Server betritt oder verlässt (höchstens alle 10 s je Spieler)."""
+    m = _JOIN_RE.search(line)
+    if not m or not notify_enabled():
+        return
+    t = re.match(r"^\[(\d\d):(\d\d):(\d\d)\]", line)  # nur frische Zeilen, nicht das beim Start eingelesene Log
+    if t:
+        lt = time.localtime()
+        diff = (lt.tm_hour * 3600 + lt.tm_min * 60 + lt.tm_sec) - (int(t[1]) * 3600 + int(t[2]) * 60 + int(t[3]))
+        if abs(diff) > 60 and abs(abs(diff) - 86400) > 60:
+            return
+    name, what = m.group(1), m.group(2)
+    if now() - _notify_last.get((name, what), 0) < 10:
+        return
+    _notify_last[(name, what)] = now()
+    lang = CONF.get("language") or "de"
+    if what == "joined":
+        osutil.notify(tr_msg("Spieler beigetreten", lang), tr_msg("%s ist jetzt auf dem Server" % name, lang))
+    else:
+        osutil.notify(tr_msg("Spieler gegangen", lang), tr_msg("%s hat den Server verlassen" % name, lang))
+
+
 def lang_now():
     return getattr(_tl, "lang", None) or CONF.get("language") or "de"
 
@@ -469,6 +502,8 @@ class Hub:
         self.task = None  # laufende Hintergrundaufgabe (Backup/Restore/Neustart)
 
     def push_log(self, line, kind="log"):
+        if kind == "log" and " the game" in line:
+            notify_player_event(line)
         if kind in ("sys", "err"):
             line = tr_msg(line, CONF.get("language") or "de")
         if "spark.lucko.me/" in line:
@@ -5658,12 +5693,13 @@ def create_server(path, ld, mc, lv, props, start, user):
 # ── Einstellungen für Start & Ressourcen ──
 
 SETTING_KEYS = ("ram_max_mb", "storage_max_gb", "autostart", "auto_restart", "java", "listen_host",
-                "public_address", "language", "auto_backup_hours", "auto_backup_keep")
+                "public_address", "language", "auto_backup_hours", "auto_backup_keep", "notify_system")
 
 
 def panel_settings():
     info = {k: CONF.get(k) for k in SETTING_KEYS}
     info["control"] = CONF.get("control")
+    info["notify_system"] = notify_enabled()
     info["ramEffectiveMb"] = ram_limits()[1]
     return info
 
@@ -5689,7 +5725,7 @@ def apply_settings(d):
             if v < 1:
                 raise ApiError("Speicherlimit: mindestens 1 GB")
             CONF["storage_max_gb"] = round(v, 1)
-    for k in ("autostart", "auto_restart"):
+    for k in ("autostart", "auto_restart", "notify_system"):
         if k in d:
             CONF[k] = bool(d[k])
     if "java" in d:
@@ -5808,6 +5844,7 @@ _update = {"checked": 0, "info": None}
 def r_system(h, s, q):
     info = system.install_info()
     h.json({"version": VERSION, "install": info, "autostart": system.autostart_status(),
+            "notify": notify_enabled(),
             "dataDir": DATA, "serverDir": CONF["server_dir"], "backupDir": CONF["backup_dir"],
             "update": _update["info"], "canUpdate": bool(info["installed"]), "os": system_info()["os"]})
 
@@ -5877,6 +5914,12 @@ def r_system_update(h, s, q):
         restart_self()
     threading.Thread(target=job, daemon=True).start()
     h.json({"ok": True, "version": info["version"]})
+
+
+@api("POST", "/api/system/notify-test")
+def r_notify_test(h, s, q):
+    ok = osutil.notify(tr_msg("Blockhaus"), tr_msg("So sehen Mitteilungen aus, wenn Spieler joinen oder gehen."))
+    h.json({"ok": ok})
 
 
 @api("POST", "/api/panel/quit")
