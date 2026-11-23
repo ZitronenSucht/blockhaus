@@ -50,3 +50,4 @@ if (errors.length) console.log('Fehler im Browser:\n' + errors.slice(0, 5).join(
 assert.equal(toasts.length, 3, 'erwartet: 3 Meldungen');
 assert.match(toasts[0], /Steve/);
 console.log('Meldungen: ok');
+process.exit(0);  // die Oberfläche startet Timer, die Node sonst am Leben halten
