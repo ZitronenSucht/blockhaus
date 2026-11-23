@@ -49,5 +49,14 @@ console.log('Meldungen oben rechts:', toasts);
 if (errors.length) console.log('Fehler im Browser:\n' + errors.slice(0, 5).join('\n'));
 assert.equal(toasts.length, 3, 'erwartet: 3 Meldungen');
 assert.match(toasts[0], /Steve/);
+// Varianten: anderer Thread (z. B. Paper), Namensänderung, Leerzeichen am Ende
+box.innerHTML = '';
+es.emit('log', [['log', `[${t}] [Netty Server IO #2/INFO]: Alex joined the game`],
+  ['log', `[${t}] [Server thread/INFO]: Max (formerly known as Moritz) joined the game  `]]);
+await new Promise((r) => setTimeout(r, 50));
+const v = [...box.children].map((x) => x.textContent.trim().replace(/\s+/g, ' '));
+console.log('Varianten:', v);
+assert.equal(v.length, 2, 'Varianten: erwartet 2 Meldungen');
+assert.match(v[1], /Max/);
 console.log('Meldungen: ok');
 process.exit(0);  // die Oberfläche startet Timer, die Node sonst am Leben halten

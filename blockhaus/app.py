@@ -178,7 +178,7 @@ _tl = threading.local()
 
 
 _notify_last = {}
-_JOIN_RE = re.compile(r"\]: ([A-Za-z0-9_]{1,16}) (joined|left) the game$")
+_JOIN_RE = re.compile(r"\]: ([A-Za-z0-9_]{1,16})(?: \(formerly known as [A-Za-z0-9_]{1,16}\))? (joined|left) the game\s*$")
 
 
 def notify_enabled():
@@ -540,7 +540,11 @@ LOG_FORGE = re.compile(r"^\[(?:\d{1,2}[A-Za-z]{3}\d{4} )?(\d\d:\d\d:\d\d)(?:\.\d
 LOG_PAPER = re.compile(r"^\[(\d\d:\d\d:\d\d) ([A-Z]+)\]: ?(.*)$")
 
 
+ANSI_RE = re.compile(r"\x1b\[[0-9;?]*[A-Za-z]")
+
+
 def norm_log(line):
+    line = COLOR_RE.sub("", ANSI_RE.sub("", line))
     """Bringt Log-Zeilen von Paper/Purpur und Forge/NeoForge in das Vanilla-/Fabric-Format
     „[hh:mm:ss] [Thread/LEVEL]: Text“, auf das sich Konsole, Chat, Verlauf und Toasts verlassen."""
     m = LOG_VANILLA.match(line)
@@ -3083,7 +3087,7 @@ def r_sched_action(h, s, q):
 
 # ── 4. Spieler-Historie (aus den Server-Logs) ──
 
-HIST_LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] \[Server thread/INFO\]: (.*)$")
+HIST_LINE = re.compile(r"^\[(\d\d):(\d\d):(\d\d)\] \[[^\]]+/INFO\]: (.*?)\s*$")  # jeder Thread (z. B. Paper)
 DEATH_RE = re.compile(r"^(was |were |fell |drowned|died|blew up|burned|went |hit the ground|tried to swim|walked into|"
                       r"froze|starved|suffocated|withered|experienced kinetic|discovered the floor|didn't want to live|"
                       r"left the confines|is no more|got finished)")
@@ -3091,7 +3095,7 @@ _hist_cache = {}
 
 
 def _classify(msg):
-    m = re.match(r"^([A-Za-z0-9_]{1,16}) (joined|left) the game$", msg)
+    m = re.match(r"^([A-Za-z0-9_]{1,16})(?: \(formerly known as [A-Za-z0-9_]{1,16}\))? (joined|left) the game$", msg)
     if m:
         return ("join" if m[2] == "joined" else "leave", m[1], "")
     m = re.match(r"^(?:\[Not Secure\] )?<([A-Za-z0-9_]{1,16})> (.*)$", msg)

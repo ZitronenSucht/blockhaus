@@ -359,11 +359,11 @@ function mcToasts(lines) {
   if (!MCT_KINDS.some(([k]) => pref[k])) return;
   for (const [kind, line] of lines) {
     if (kind !== 'log') continue;
-    const m = line.match(/^\[[\d:]+\] \[Server thread\/INFO\]: (.*)$/);
+    const m = line.match(/^\[[\d:]+\] \[[^\]]+\/INFO\]: (.*?)\s*$/);  // jeder Thread (Paper, Fabric, Forge …)
     if (!m) continue;
     const msg = m[1];
     let r;
-    if ((r = msg.match(/^([A-Za-z0-9_]{1,16}) (joined|left) the game$/))) pref[r[2] === 'joined' ? 'join' : 'leave'] && mcToast(r[2] === 'joined' ? 'join' : 'leave', r[1], r[2] === 'joined' ? 'Spieler beigetreten' : 'Spieler gegangen', r[2] === 'joined' ? `${r[1]} ist jetzt online` : `${r[1]} hat das Spiel verlassen`);
+    if ((r = msg.match(/^([A-Za-z0-9_]{1,16})(?: \(formerly known as [A-Za-z0-9_]{1,16}\))? (joined|left) the game$/))) pref[r[2] === 'joined' ? 'join' : 'leave'] && mcToast(r[2] === 'joined' ? 'join' : 'leave', r[1], r[2] === 'joined' ? 'Spieler beigetreten' : 'Spieler gegangen', r[2] === 'joined' ? `${r[1]} ist jetzt online` : `${r[1]} hat das Spiel verlassen`);
     else if ((r = msg.match(/^([A-Za-z0-9_]{1,16}) has (made the advancement|completed the challenge|reached the goal) \[(.+)\]$/))) {
       const t = { 'made the advancement': ['adv', 'Fortschritt erzielt!'], 'completed the challenge': ['challenge', 'Aufgabe erledigt!'], 'reached the goal': ['goal', 'Ziel erreicht!'] }[r[2]];
       if (pref.adv) mcToast(t[0], r[1], t[1], `${r[1]}: ${r[3]}`);
@@ -2796,12 +2796,12 @@ VIEWS.chat = (v) => {
   const item = ([kind, line]) => {
     if (kind === 'adminchat') { const [u, to, ...m] = line.split('|'); return `<div class="msg me"><div class="bubble"><small>${esc(u)}${to ? ' → ' + esc(to) : ''} · Admin</small>${esc(m.join('|'))}</div></div>`; }
     if (kind !== 'log') return '';
-    const mm = line.match(/^\[(\d\d:\d\d):\d\d\] \[Server thread\/INFO\]: (.*)$/);
+    const mm = line.match(/^\[(\d\d:\d\d):\d\d\] \[[^\]]+\/INFO\]: (.*?)\s*$/);
     if (!mm) return '';
     const [, t, msg] = mm;
     let c = msg.match(/^(?:\[Not Secure\] )?<([A-Za-z0-9_]{1,16})> (.*)$/);
     if (c) return `<div class="msg">${headImg(c[1])}<div class="bubble"><small style="color:${playerColor(c[1])}">${esc(c[1])} · ${t}</small>${esc(c[2])}</div></div>`;
-    c = msg.match(/^([A-Za-z0-9_]{1,16}) (joined|left) the game$/);
+    c = msg.match(/^([A-Za-z0-9_]{1,16})(?: \(formerly known as [A-Za-z0-9_]{1,16}\))? (joined|left) the game$/);
     if (c) return `<div class="sysmsg">${t} · <b>${esc(c[1])}</b> ${c[2] === 'joined' ? 'ist beigetreten' : 'hat das Spiel verlassen'}</div>`;
     c = msg.match(/^([A-Za-z0-9_]{1,16}) has (?:made the advancement|completed the challenge|reached the goal) \[(.+)\]$/);
     if (c) return `<div class="sysmsg">${t} · <b>${esc(c[1])}</b> hat den Erfolg <b style="color:var(--gold)">${esc(c[2])}</b> erzielt</div>`;
