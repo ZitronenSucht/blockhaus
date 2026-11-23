@@ -30,8 +30,8 @@ w.EventSource = FakeES;
 w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 w.HTMLCanvasElement.prototype.getContext = () => null;
 
-w.eval(readFileSync(new URL('i18n.js', root), 'utf8'));
-w.eval(readFileSync(new URL('app.js', root), 'utf8'));
+// beide Skripte teilen sich im Browser den globalen Bereich – hier in einem Aufruf laden
+w.eval(readFileSync(new URL('i18n.js', root), 'utf8') + '\n' + readFileSync(new URL('app.js', root), 'utf8'));
 await new Promise((r) => setTimeout(r, 300));
 assert.ok(FakeES.last, 'Live-Verbindung wurde nicht aufgebaut. Fehler: ' + errors.slice(0, 3).join(' | '));
 
