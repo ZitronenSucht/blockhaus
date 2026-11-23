@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.1.5
+
+- Behoben: Der Wechsel von Paper/Purpur zu Fabric, Forge, NeoForge oder Vanilla scheiterte („Failed to load datapacks“). Blockhaus übernimmt jetzt Seed, Spielregeln und Wetter in das Format der neuen Software und entfernt das Paper-Datapack – die Welt bleibt dieselbe
+- Fixed: switching from Paper/Purpur to Fabric, Forge, NeoForge or Vanilla failed; the world (including its seed) is now carried over
+
 ## 0.1.4
 
 - Behoben: Symbole in Knöpfen innerhalb von Hinweisen (z. B. „Jetzt installieren“) waren kaum zu erkennen
