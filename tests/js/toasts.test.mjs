@@ -10,7 +10,7 @@ const errors = [];
 const vc = new VirtualConsole();
 vc.on('jsdomError', (e) => errors.push(String(e && (e.stack || e.message) || e)));
 vc.on('error', (...a) => errors.push(a.join(' ')));
-const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/#/admins', virtualConsole: vc, pretendToBeVisual: true });
+const dom = new JSDOM(html, { runScripts: 'outside-only', url: 'http://localhost/#/console', virtualConsole: vc, pretendToBeVisual: true });
 const w = dom.window;
 
 const ME = { user: 'admin', csrf: 'x', address: '127.0.0.1', port: '25565', motd: 'Test', hasServer: true, language: 'de', appVersion: '0.0.0',
