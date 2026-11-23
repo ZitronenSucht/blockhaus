@@ -29,6 +29,7 @@ class FakeES {
 w.EventSource = FakeES;
 w.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 w.HTMLCanvasElement.prototype.getContext = () => null;
+w.localStorage.setItem('bh.lang', 'de');  // passt zum Konto – sonst lädt die Seite neu
 
 // beide Skripte teilen sich im Browser den globalen Bereich – hier in einem Aufruf laden
 w.eval(readFileSync(new URL('i18n.js', root), 'utf8') + '\n' + readFileSync(new URL('app.js', root), 'utf8'));
